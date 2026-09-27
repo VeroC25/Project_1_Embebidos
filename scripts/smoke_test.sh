@@ -23,4 +23,29 @@ gst-launch-1.0 -q -e \
 # Verificar que el archivo MP4 no esté vacío.
 test -s /tmp/prueba_docker.mp4
 
+# Extraer las características del video generado.
+echo "Comprobando el contenido del MP4..."
+
+codec=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=codec_name \
+    -of default=noprint_wrappers=1:nokey=1 \
+    /tmp/prueba_docker.mp4)
+
+ancho=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=width \
+    -of default=noprint_wrappers=1:nokey=1 \
+    /tmp/prueba_docker.mp4)
+
+alto=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=height \
+    -of default=noprint_wrappers=1:nokey=1 \
+    /tmp/prueba_docker.mp4)
+
+# Comparar los resultados con los valores esperados.
+test "$codec" = "h264"
+test "$ancho" = "640"
+test "$alto" = "360"
+
+echo "Codec: $codec"
+echo "Resolución: ${ancho}x${alto}"
 echo "Todas las pruebas finalizaron correctamente."

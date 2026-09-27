@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear el directorio de trabajo.
@@ -24,6 +25,9 @@ WORKDIR /proyecto
 
 # Incorporar una copia de la aplicación.
 COPY prueba_integrada_h1.py ./prueba_integrada_h1.py
+
+# Incorporar los scripts del emisor y del vigilante.
+COPY docker/ ./docker/
 
 # Mantener Bash como comando predeterminado.
 CMD ["bash"]

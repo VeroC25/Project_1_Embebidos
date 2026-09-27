@@ -1,0 +1,28 @@
+services:
+
+  vigilante:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: control-acceso-vigilante:dev
+    command: ["bash", "docker/vigilante.sh"]
+    networks:
+      - red-control-acceso
+
+  emisor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: control-acceso-emisor:dev
+    command: ["bash", "docker/emisor.sh"]
+    environment:
+      DEST_HOST: vigilante
+      DEST_PORT: "5000"
+    depends_on:
+      - vigilante
+    networks:
+      - red-control-acceso
+
+networks:
+  red-control-acceso:
+    driver: bridge

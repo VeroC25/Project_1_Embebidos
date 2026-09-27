@@ -1,0 +1,5 @@
+services:
+  vigilante:
+    command: ["python3", "-u", "/proyecto/docker/vigilante_web.py"]
+    ports:
+      - "127.0.0.1:8081:8081"
