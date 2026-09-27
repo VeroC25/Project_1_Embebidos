@@ -1,0 +1,18 @@
+# Archivos generados por Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Datos y resultados de ejecución
+*.mp4
+*.log
+F123_salud.csv
+F5_*.txt
+F6_*.txt
+*.bin
+
+# Archivos locales
+.env
+.env.*
+!.env.example
