@@ -33,6 +33,12 @@ pipeline {
                 '''
             }
         }
+
+        stage('Probar comunicacion Docker') {
+            steps {
+                sh 'bash scripts/test_compose.sh'
+            }
+        }
     }
 
     post {
@@ -45,3 +51,4 @@ pipeline {
         }
     }
 }
+
