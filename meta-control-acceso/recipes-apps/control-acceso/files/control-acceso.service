@@ -1,0 +1,16 @@
+[Unit]
+Description=Sistema de control de acceso
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/control-acceso
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/var/lib/control-acceso
+StateDirectory=control-acceso
+ExecStart=/usr/bin/python3 /usr/bin/control-acceso
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
