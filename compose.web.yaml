@@ -1,5 +1,12 @@
+
 services:
   vigilante:
     command: ["python3", "-u", "/proyecto/docker/vigilante_web.py"]
     ports:
-      - "127.0.0.1:8081:8081"
+      # Interfaz web accesible desde esta laptop.
+      - "127.0.0.1:8081:8081/tcp"
+
+      # Recepción RTP/UDP desde la Raspberry Pi o QEMU.
+      - "5000:5000/udp"
+
+
