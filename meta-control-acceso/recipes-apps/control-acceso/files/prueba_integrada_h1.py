@@ -70,7 +70,9 @@ TIEMPO_MAX_DECISION = 0.5  # segundos, valor preliminar de prueba
 
 executor_validacion = ThreadPoolExecutor(max_workers=1)
 ARCHIVO_BITACORA = "bitacora_accesos.log"
-
+ARCHIVO_EVIDENCIA = datetime.now().strftime(
+    "evidencia_%Y%m%d_%H%M%S.mp4"
+)
 
 identificadores_autorizados = {
     "MC001"
@@ -168,7 +170,8 @@ def registrar_evento(identificador, resultado):
     linea = (
         f"{marca_tiempo} | "
         f"ID: {identificador} | "
-        f"RESULTADO: {resultado}\n"
+        f"RESULTADO: {resultado} | "
+        f"EVIDENCIA: {ARCHIVO_EVIDENCIA}\n"
     )
 
     with open(ARCHIVO_BITACORA, "a", encoding="utf-8") as archivo:
@@ -372,7 +375,7 @@ pipeline = Gst.parse_launch(
     "max-size-buffers=8 max-size-bytes=0 "
     "max-size-time=0 leaky=no ! "
     "mp4mux ! "
-    "filesink location=evidencia_integrada.mp4 "
+    f"filesink location={ARCHIVO_EVIDENCIA} "
 
     # Rama 3B: transmision RTP/UDP
     "tm. ! queue name=q_stream "
