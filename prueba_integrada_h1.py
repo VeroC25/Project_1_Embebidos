@@ -73,7 +73,7 @@ ARCHIVO_BITACORA = "bitacora_accesos.log"
 
 
 identificadores_autorizados = {
-   "https://drive.google.com/file/d/1_XKkNFvCOdV_3Rbxqi4LNXk-LgOhisOy/view?usp=drivesdk"
+    "MC001"
 }
 
 def validar_identificador(identificador):
