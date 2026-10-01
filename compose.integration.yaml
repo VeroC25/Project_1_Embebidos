@@ -1,0 +1,7 @@
+services:
+  vigilante:
+    image: control-acceso-vigilante:dev
+    command: ["python3", "-u", "/proyecto/docker/vigilante_web.py"]
+    ports:
+      - "127.0.0.1:8081:8081/tcp"
+      - "5000:5000/udp"
