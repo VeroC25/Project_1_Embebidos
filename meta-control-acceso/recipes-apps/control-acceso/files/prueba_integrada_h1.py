@@ -30,6 +30,8 @@ DEST_PORT = int(os.getenv("DEST_PORT", "5000"))
 TIEMPO_MAX_DECISION = 10.0
 DURACION_EVIDENCIA = 60
 TIEMPO_REARME_QR = 1.0
+DIAS_RETENCION_VIDEO = 7
+DIAS_RETENCION_BITACORA = 30
 
 DATA_DIR = os.getenv(
     "CONTROL_ACCESO_DATA_DIR",
@@ -51,6 +53,41 @@ os.makedirs(
     exist_ok=True
 )
 
+def limpiar_evidencias_antiguas():
+    ahora = datetime.now()
+
+    # Evitar borrados si el reloj del sistema aún no es válido
+    if ahora < datetime(2026, 1, 1):
+        print("Limpieza de evidencias omitida: fecha del sistema no válida.")
+        return
+
+    eliminadas = 0
+
+    for nombre in os.listdir(CARPETA_EVIDENCIAS):
+        try:
+            fecha_evidencia = datetime.strptime(
+                nombre,
+                "evidencia_%Y-%m-%d_%H-%M-%S_%f.mp4"
+            )
+        except ValueError:
+            continue
+
+        antiguedad = ahora - fecha_evidencia
+
+        if antiguedad.total_seconds() >= DIAS_RETENCION_VIDEO * 86400:
+            ruta = os.path.join(CARPETA_EVIDENCIAS, nombre)
+
+            try:
+                os.remove(ruta)
+                eliminadas += 1
+                print(f"Evidencia eliminada por retención: {ruta}")
+            except OSError as error:
+                print(f"No se pudo eliminar {ruta}: {error}")
+
+    if eliminadas > 0:
+        print(f"Total de evidencias eliminadas: {eliminadas}")
+
+
 print(f"Modo de ejecucion: {MODO}")
 print(
     "Interfaz grafica: "
@@ -58,6 +95,52 @@ print(
 )
 print(f"Destino RTP/UDP: {DEST_HOST}:{DEST_PORT}")
 print(f"Directorio de datos: {DATA_DIR}")
+
+def limpiar_bitacora_antigua():
+    ahora = datetime.now()
+
+    # Evitar modificaciones si el reloj del sistema no es válido
+    if ahora < datetime(2026, 1, 1):
+        print("Limpieza de bitácora omitida: fecha del sistema no válida.")
+        return
+
+    if not os.path.exists(ARCHIVO_BITACORA):
+        return
+
+    lineas_conservadas = []
+    eventos_eliminados = 0
+
+    with open(ARCHIVO_BITACORA, "r", encoding="utf-8") as archivo:
+        for linea in archivo:
+            try:
+                fecha_evento = datetime.strptime(
+                    linea[:19],
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            except ValueError:
+                # Una línea desconocida se conserva por seguridad
+                lineas_conservadas.append(linea)
+                continue
+
+            antiguedad = ahora - fecha_evento
+
+            if antiguedad.total_seconds() >= DIAS_RETENCION_BITACORA * 86400:
+                eventos_eliminados += 1
+            else:
+                lineas_conservadas.append(linea)
+
+    temporal = ARCHIVO_BITACORA + ".tmp"
+
+    with open(temporal, "w", encoding="utf-8") as archivo:
+        archivo.writelines(lineas_conservadas)
+
+    os.replace(temporal, ARCHIVO_BITACORA)
+
+    if eventos_eliminados > 0:
+        print(
+            f"Eventos eliminados de la bitácora por retención: "
+            f"{eventos_eliminados}"
+        )
 
 
 # ============================================================
@@ -967,6 +1050,9 @@ def manejar_mensaje(
 
     return True
 
+# Aplicar política de retención al iniciar la aplicación
+limpiar_evidencias_antiguas()
+limpiar_bitacora_antigua()
 
 # ============================================================
 # PIPELINE
