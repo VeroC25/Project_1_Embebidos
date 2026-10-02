@@ -4,41 +4,91 @@ import numpy as np
 import queue
 import threading
 import time
-from datetime import datetime
-import signal
 import os
+import signal
 
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 gi.require_version("Gst", "1.0")
 
 from gi.repository import Gst, GLib
 
+Gst.init(None)
+
+
+# ============================================================
+# CONFIGURACION GENERAL
+# ============================================================
+
 MODO = os.getenv("CONTROL_ACCESO_MODE", "rpi").lower()
 MOSTRAR_GUI = os.getenv("CONTROL_ACCESO_GUI", "0") == "1"
 
 DEST_HOST = os.getenv("DEST_HOST", "127.0.0.1")
-DEST_PORT = os.getenv("DEST_PORT", "5000")
+DEST_PORT = int(os.getenv("DEST_PORT", "5000"))
 
-print(f"Modo de ejecución: {MODO}")
-print(f"Interfaz gráfica: {'habilitada' if MOSTRAR_GUI else 'deshabilitada'}")
+TIEMPO_MAX_DECISION = 10.0
+DURACION_EVIDENCIA = 60
+TIEMPO_REARME_QR = 1.0
+
+DATA_DIR = os.getenv(
+    "CONTROL_ACCESO_DATA_DIR",
+    os.getcwd()
+)
+
+ARCHIVO_BITACORA = os.path.join(
+    DATA_DIR,
+    "bitacora_accesos.log"
+)
+
+CARPETA_EVIDENCIAS = os.path.join(
+    DATA_DIR,
+    "evidencias"
+)
+
+os.makedirs(
+    CARPETA_EVIDENCIAS,
+    exist_ok=True
+)
+
+print(f"Modo de ejecucion: {MODO}")
+print(
+    "Interfaz grafica: "
+    f"{'habilitada' if MOSTRAR_GUI else 'deshabilitada'}"
+)
 print(f"Destino RTP/UDP: {DEST_HOST}:{DEST_PORT}")
+print(f"Directorio de datos: {DATA_DIR}")
+
+
+# ============================================================
+# FUENTE DE VIDEO
+# ============================================================
 
 if MODO == "qemu":
     FUENTE_VIDEO = (
         "videotestsrc is-live=true pattern=smpte ! "
         "video/x-raw,width=1280,height=720,framerate=30/1 ! "
     )
+
+elif MODO == "host":
+    FUENTE_VIDEO = (
+        "v4l2src device=/dev/video0 ! "
+        "image/jpeg,width=1280,height=720,framerate=30/1 ! "
+        "jpegdec ! "
+    )
+
 else:
     FUENTE_VIDEO = (
         "libcamerasrc ! "
         "video/x-raw,width=1280,height=720,framerate=30/1 ! "
     )
 
+
 if MOSTRAR_GUI:
     SINK_PREVIEW = "autovideosink sync=false "
 else:
     SINK_PREVIEW = "fakesink sync=false "
+
 
 ENCODER_H264 = (
     "x264enc tune=zerolatency bitrate=2000 "
@@ -46,43 +96,51 @@ ENCODER_H264 = (
     "option-string=scenecut=0 ! "
 )
 
-Gst.init(None)
 
-# Cola de entrada hacia el procesamiento QR
+# ============================================================
+# COLAS Y EVENTOS
+# ============================================================
+
 cola_frames = queue.Queue(maxsize=2)
-
-# Cola para enviar el frame procesado hacia la interfaz
 cola_visual = queue.Queue(maxsize=1)
 
 detener = threading.Event()
-# Indica que el pipeline terminó debido a un error fatal
 error_fatal = threading.Event()
+cierre_solicitado = threading.Event()
 
+
+# ============================================================
+# QR Y MEDICIONES
+# ============================================================
 
 detector = cv2.QRCodeDetector()
 
 contador = 0
 ultimo_codigo = ""
+ultimo_qr_visto_t = 0.0
+
 tiempo_callback_total_ns = 0
 tiempo_callback_max_ns = 0
 callbacks_medidos = 0
-TIEMPO_MAX_DECISION = 0.5  # segundos, valor preliminar de prueba
+
+
+# ============================================================
+# VALIDACION
+# ============================================================
 
 executor_validacion = ThreadPoolExecutor(max_workers=1)
-ARCHIVO_BITACORA = "bitacora_accesos.log"
-ARCHIVO_EVIDENCIA = datetime.now().strftime(
-    "evidencia_%Y%m%d_%H%M%S.mp4"
-)
 
 identificadores_autorizados = {
     "MC001"
 }
+
 
 def validar_identificador(identificador):
     return identificador in identificadores_autorizados
 
 
 def validar_con_timeout(identificador):
+
     future = executor_validacion.submit(
         validar_identificador,
         identificador
@@ -98,7 +156,350 @@ def validar_con_timeout(identificador):
     except TimeoutError:
         return False, True
 
+
+# ============================================================
+# CONTROL DE GRABACIONES
+# ============================================================
+
+grabaciones_activas = {}
+
+contador_grabaciones = 0
+
+
+def solicitar_grabacion_evento():
+
+    marca_tiempo = datetime.now().strftime(
+        "%Y-%m-%d_%H-%M-%S_%f"
+    )
+
+    ruta_video = os.path.join(
+        CARPETA_EVIDENCIAS,
+        f"evidencia_{marca_tiempo}.mp4"
+    )
+
+    GLib.idle_add(
+        iniciar_grabacion_evento,
+        ruta_video
+    )
+
+    return ruta_video
+
+
+def iniciar_grabacion_evento(ruta_video):
+
+    global contador_grabaciones
+
+    contador_grabaciones += 1
+
+    id_grabacion = contador_grabaciones
+
+    bin_grabacion = None
+    tee_pad = None
+    sink_pad = None
+
+    descripcion = (
+        f"queue "
+        f"name=q_evento_{id_grabacion} "
+        f"max-size-buffers=0 "
+        f"max-size-bytes=0 "
+        f"max-size-time=0 ! "
+        f"h264parse config-interval=-1 ! "
+        f"mp4mux "
+        f"name=mux_evento_{id_grabacion} ! "
+        f"filesink "
+        f"name=archivo_evento_{id_grabacion} "
+        f'location="{ruta_video}" '
+        f"sync=false"
+    )
+
+    try:
+
+        bin_grabacion = Gst.parse_bin_from_description(
+            descripcion,
+            True
+        )
+
+        bin_grabacion.set_name(
+            f"grabacion_evento_{id_grabacion}"
+        )
+
+        pipeline.add(
+            bin_grabacion
+        )
+
+        tee_pad = tm.request_pad_simple(
+            "src_%u"
+        )
+
+        sink_pad = bin_grabacion.get_static_pad(
+            "sink"
+        )
+
+        if tee_pad is None or sink_pad is None:
+            raise RuntimeError(
+                "No fue posible obtener los pads "
+                "de grabacion."
+            )
+
+        resultado_link = tee_pad.link(
+            sink_pad
+        )
+
+        if resultado_link != Gst.PadLinkReturn.OK:
+            raise RuntimeError(
+                "No fue posible enlazar "
+                "la rama de grabacion."
+            )
+
+        filesink = bin_grabacion.get_by_name(
+            f"archivo_evento_{id_grabacion}"
+        )
+
+        filesink_pad = filesink.get_static_pad(
+            "sink"
+        )
+
+        filesink_pad.add_probe(
+            Gst.PadProbeType.EVENT_DOWNSTREAM,
+            detectar_eos_grabacion,
+            id_grabacion
+        )
+
+        grabaciones_activas[
+            id_grabacion
+        ] = {
+            "bin": bin_grabacion,
+            "tee_pad": tee_pad,
+            "sink_pad": sink_pad,
+            "ruta": ruta_video,
+            "probe_bloqueo": None
+        }
+
+        if not bin_grabacion.sync_state_with_parent():
+            raise RuntimeError(
+                "No se pudo sincronizar "
+                "la grabacion."
+            )
+
+        GLib.timeout_add_seconds(
+            DURACION_EVIDENCIA,
+            detener_grabacion_evento,
+            id_grabacion
+        )
+
+        print()
+        print("Grabacion de evidencia iniciada.")
+        print(
+            f"Duracion: "
+            f"{DURACION_EVIDENCIA} s"
+        )
+        print(
+            f"Archivo: {ruta_video}"
+        )
+        print()
+
+    except Exception as error:
+
+        print()
+        print("[ERROR AL INICIAR EVIDENCIA]")
+        print(error)
+
+        if (
+            tee_pad is not None
+            and sink_pad is not None
+            and tee_pad.is_linked()
+        ):
+            tee_pad.unlink(
+                sink_pad
+            )
+
+        if tee_pad is not None:
+            tm.release_request_pad(
+                tee_pad
+            )
+
+        if bin_grabacion is not None:
+
+            bin_grabacion.set_state(
+                Gst.State.NULL
+            )
+
+            try:
+                pipeline.remove(
+                    bin_grabacion
+                )
+
+            except Exception:
+                pass
+
+    return False
+
+
+def detener_grabacion_evento(
+    id_grabacion
+):
+
+    datos = grabaciones_activas.get(
+        id_grabacion
+    )
+
+    if datos is None:
+        return False
+
+    tee_pad = datos[
+        "tee_pad"
+    ]
+
+    print()
+    print(
+        f"Se cumplieron "
+        f"{DURACION_EVIDENCIA} s "
+        f"de la evidencia "
+        f"{id_grabacion}."
+    )
+
+    probe_id = tee_pad.add_probe(
+        Gst.PadProbeType.BLOCK_DOWNSTREAM,
+        bloquear_y_finalizar_grabacion,
+        id_grabacion
+    )
+
+    datos[
+        "probe_bloqueo"
+    ] = probe_id
+
+    return False
+
+
+def bloquear_y_finalizar_grabacion(
+    pad,
+    info,
+    id_grabacion
+):
+
+    datos = grabaciones_activas.get(
+        id_grabacion
+    )
+
+    if datos is None:
+        return Gst.PadProbeReturn.REMOVE
+
+    print(
+        f"Finalizando evidencia "
+        f"{id_grabacion}..."
+    )
+
+    enviado = datos[
+        "bin"
+    ].send_event(
+        Gst.Event.new_eos()
+    )
+
+    if not enviado:
+        print(
+            "Advertencia: no fue posible "
+            "enviar EOS a la grabacion."
+        )
+
+    return Gst.PadProbeReturn.OK
+
+
+def detectar_eos_grabacion(
+    pad,
+    info,
+    id_grabacion
+):
+
+    evento = info.get_event()
+
+    if (
+        evento is not None
+        and evento.type
+        == Gst.EventType.EOS
+    ):
+
+        GLib.idle_add(
+            limpiar_grabacion_evento,
+            id_grabacion
+        )
+
+    return Gst.PadProbeReturn.OK
+
+
+def limpiar_grabacion_evento(
+    id_grabacion
+):
+
+    datos = grabaciones_activas.pop(
+        id_grabacion,
+        None
+    )
+
+    if datos is None:
+        return False
+
+    bin_grabacion = datos[
+        "bin"
+    ]
+
+    tee_pad = datos[
+        "tee_pad"
+    ]
+
+    sink_pad = datos[
+        "sink_pad"
+    ]
+
+    probe_bloqueo = datos.get(
+        "probe_bloqueo"
+    )
+
+    if tee_pad.is_linked():
+        tee_pad.unlink(
+            sink_pad
+        )
+
+    if probe_bloqueo is not None:
+
+        try:
+            tee_pad.remove_probe(
+                probe_bloqueo
+            )
+
+        except Exception:
+            pass
+
+    tm.release_request_pad(
+        tee_pad
+    )
+
+    bin_grabacion.set_state(
+        Gst.State.NULL
+    )
+
+    pipeline.remove(
+        bin_grabacion
+    )
+
+    print(
+        "Evidencia guardada correctamente:"
+    )
+
+    print(
+        datos["ruta"]
+    )
+
+    print()
+
+    return False
+
+
+# ============================================================
+# CALLBACK DE VIDEO
+# ============================================================
+
 def nuevo_frame(appsink):
+
     global contador
     global tiempo_callback_total_ns
     global tiempo_callback_max_ns
@@ -106,99 +507,204 @@ def nuevo_frame(appsink):
 
     inicio_callback = time.perf_counter_ns()
 
-    sample = appsink.emit("pull-sample")
+    sample = appsink.emit(
+        "pull-sample"
+    )
 
     if sample is None:
         return Gst.FlowReturn.ERROR
 
     buffer = sample.get_buffer()
+
     caps = sample.get_caps()
-    estructura = caps.get_structure(0)
 
-    width = estructura.get_value("width")
-    height = estructura.get_value("height")
+    estructura = caps.get_structure(
+        0
+    )
 
-    success, map_info = buffer.map(Gst.MapFlags.READ)
+    width = estructura.get_value(
+        "width"
+    )
+
+    height = estructura.get_value(
+        "height"
+    )
+
+    success, map_info = buffer.map(
+        Gst.MapFlags.READ
+    )
 
     if not success:
         return Gst.FlowReturn.ERROR
 
     try:
+
         frame = np.frombuffer(
             map_info.data,
             dtype=np.uint8
-        ).reshape((height, width, 3)).copy()
+        ).reshape(
+            (
+                height,
+                width,
+                3
+            )
+        ).copy()
 
     finally:
-        buffer.unmap(map_info)
+
+        buffer.unmap(
+            map_info
+        )
 
     contador += 1
 
-    # Mantener el callback rápido.
-    # Si la cola está llena, descartamos el frame anterior.
     try:
-        cola_frames.put_nowait(frame)
+        cola_frames.put_nowait(
+            frame
+        )
 
     except queue.Full:
+
         try:
             cola_frames.get_nowait()
+
         except queue.Empty:
             pass
 
         try:
-            cola_frames.put_nowait(frame)
+            cola_frames.put_nowait(
+                frame
+            )
+
         except queue.Full:
             pass
 
     if contador % 30 == 0:
-        print(f"Frames recibidos: {contador}")
+
+        print(
+            f"Frames recibidos: "
+            f"{contador}"
+        )
 
     fin_callback = time.perf_counter_ns()
-    duracion_ns = fin_callback - inicio_callback
 
-    tiempo_callback_total_ns += duracion_ns
+    duracion_ns = (
+        fin_callback
+        - inicio_callback
+    )
+
+    tiempo_callback_total_ns += (
+        duracion_ns
+    )
+
     callbacks_medidos += 1
 
-    if duracion_ns > tiempo_callback_max_ns:
-        tiempo_callback_max_ns = duracion_ns
+    if (
+        duracion_ns
+        > tiempo_callback_max_ns
+    ):
+
+        tiempo_callback_max_ns = (
+            duracion_ns
+        )
 
     return Gst.FlowReturn.OK
 
-def registrar_evento(identificador, resultado):
-    marca_tiempo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# ============================================================
+# BITACORA
+# ============================================================
+
+def registrar_evento(
+    identificador,
+    resultado,
+    archivo_video
+):
+
+    marca_tiempo = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    video_relativo = os.path.relpath(
+        archivo_video,
+        DATA_DIR
+    )
 
     linea = (
         f"{marca_tiempo} | "
         f"ID: {identificador} | "
         f"RESULTADO: {resultado} | "
-        f"EVIDENCIA: {ARCHIVO_EVIDENCIA}\n"
+        f"EVIDENCIA: {video_relativo}\n"
     )
 
-    with open(ARCHIVO_BITACORA, "a", encoding="utf-8") as archivo:
-        archivo.write(linea)
+    with open(
+        ARCHIVO_BITACORA,
+        "a",
+        encoding="utf-8"
+    ) as archivo:
 
-    print(f"Evento registrado en {ARCHIVO_BITACORA}")
+        archivo.write(
+            linea
+        )
+
+    print(
+        f"Evento registrado en "
+        f"{ARCHIVO_BITACORA}"
+    )
+
+    print(
+        f"Evidencia asociada: "
+        f"{video_relativo}"
+    )
+
+
+# ============================================================
+# PROCESAMIENTO QR
+# ============================================================
 
 def procesar_qr():
+
     global ultimo_codigo
+    global ultimo_qr_visto_t
 
     while not detener.is_set():
 
         try:
-            frame = cola_frames.get(timeout=0.2)
+
+            frame = cola_frames.get(
+                timeout=0.2
+            )
 
         except queue.Empty:
             continue
 
-        data, puntos, _ = detector.detectAndDecode(frame)
+        data, puntos, _ = (
+            detector.detectAndDecode(
+                frame
+            )
+        )
 
-        # Si se detectó un QR, dibujar el contorno
         if puntos is not None:
-            puntos = puntos.astype(int).reshape(-1, 2)
 
-            for i in range(len(puntos)):
-                p1 = tuple(puntos[i])
-                p2 = tuple(puntos[(i + 1) % len(puntos)])
+            puntos = (
+                puntos.astype(int)
+                .reshape(-1, 2)
+            )
+
+            for i in range(
+                len(puntos)
+            ):
+
+                p1 = tuple(
+                    puntos[i]
+                )
+
+                p2 = tuple(
+                    puntos[
+                        (i + 1)
+                        % len(puntos)
+                    ]
+                )
 
                 cv2.line(
                     frame,
@@ -208,12 +714,20 @@ def procesar_qr():
                     3
                 )
 
-        # Si además se logró decodificar
         if data:
 
+            ultimo_qr_visto_t = (
+                time.monotonic()
+            )
+
             if puntos is not None:
+
                 x = puntos[0][0]
-                y = puntos[0][1] - 15
+
+                y = (
+                    puntos[0][1]
+                    - 15
+                )
 
                 cv2.putText(
                     frame,
@@ -226,66 +740,129 @@ def procesar_qr():
                 )
 
             if data != ultimo_codigo:
-                print("\nQR detectado:")
-                print(data)
 
-                autorizado, timeout = validar_con_timeout(data)
+                print()
+                print(
+                    "QR detectado:"
+                )
+
+                print(
+                    data
+                )
+
+                archivo_video = (
+                    solicitar_grabacion_evento()
+                )
+
+                autorizado, timeout = (
+                    validar_con_timeout(
+                        data
+                    )
+                )
 
                 if timeout:
+
                     print(
-                        f"Tiempo máximo de decisión excedido "
+                        "Tiempo maximo "
+                        "de decision excedido "
                         f"({TIEMPO_MAX_DECISION:.1f} s)"
                     )
-                    print("Resultado: ACCESO DENEGADO POR TIMEOUT")
 
-                    registrar_evento(
-                        data,
+                    print(
+                        "Resultado: "
+                        "ACCESO DENEGADO "
+                        "POR TIMEOUT"
+                    )
+
+                    resultado = (
                         "DENEGADO_TIMEOUT"
                     )
 
                 elif autorizado:
-                    print("Resultado: ACCESO AUTORIZADO")
 
-                    registrar_evento(
-                        data,
+                    print(
+                        "Resultado: "
+                        "ACCESO AUTORIZADO"
+                    )
+
+                    resultado = (
                         "AUTORIZADO"
                     )
 
                 else:
-                    print("Resultado: ACCESO DENEGADO")
 
-                    registrar_evento(
-                        data,
+                    print(
+                        "Resultado: "
+                        "ACCESO DENEGADO"
+                    )
+
+                    resultado = (
                         "DENEGADO"
                     )
+
+                registrar_evento(
+                    data,
+                    resultado,
+                    archivo_video
+                )
 
                 print()
 
                 ultimo_codigo = data
 
-        # Entregar el último frame procesado
+        else:
+
+            if (
+                ultimo_codigo
+                and (
+                    time.monotonic()
+                    - ultimo_qr_visto_t
+                )
+                >= TIEMPO_REARME_QR
+            ):
+
+                ultimo_codigo = ""
+
         try:
-            cola_visual.put_nowait(frame)
+
+            cola_visual.put_nowait(
+                frame
+            )
 
         except queue.Full:
+
             try:
+
                 cola_visual.get_nowait()
+
             except queue.Empty:
                 pass
 
             try:
-                cola_visual.put_nowait(frame)
+
+                cola_visual.put_nowait(
+                    frame
+                )
+
             except queue.Full:
                 pass
 
 
+# ============================================================
+# VISUALIZACION
+# ============================================================
+
 def mostrar_video():
 
     if not MOSTRAR_GUI:
+
         return not detener.is_set()
 
     try:
-        frame = cola_visual.get_nowait()
+
+        frame = (
+            cola_visual.get_nowait()
+        )
 
         cv2.imshow(
             "QR procesado - OpenCV",
@@ -295,101 +872,259 @@ def mostrar_video():
     except queue.Empty:
         pass
 
-    cv2.waitKey(1)
+    cv2.waitKey(
+        1
+    )
 
     return not detener.is_set()
 
-def manejar_mensaje(bus, mensaje):
+
+# ============================================================
+# BUS DE GSTREAMER
+# ============================================================
+
+def manejar_mensaje(
+    bus,
+    mensaje
+):
+
     tipo = mensaje.type
 
     if tipo == Gst.MessageType.ERROR:
-        error, debug = mensaje.parse_error()
 
-        print("\n[GStreamer ERROR]")
-        print(f"Origen: {mensaje.src.get_name()}")
-        print(f"Error: {error}")
+        error, debug = (
+            mensaje.parse_error()
+        )
+
+        print()
+        print(
+            "[GStreamer ERROR]"
+        )
+
+        print(
+            f"Origen: "
+            f"{mensaje.src.get_name()}"
+        )
+
+        print(
+            f"Error: {error}"
+        )
 
         if debug:
-            print(f"Debug: {debug}")
 
-        # Registrar que ocurrió un error fatal.
+            print(
+                f"Debug: {debug}"
+            )
+
         error_fatal.set()
 
-        # Salir del bucle principal para iniciar el cierre.
         loop.quit()
 
-    elif tipo == Gst.MessageType.WARNING:
-        warning, debug = mensaje.parse_warning()
+    elif (
+        tipo
+        == Gst.MessageType.WARNING
+    ):
 
-        print("\n[GStreamer WARNING]")
-        print(f"Origen: {mensaje.src.get_name()}")
-        print(f"Warning: {warning}")
+        warning, debug = (
+            mensaje.parse_warning()
+        )
+
+        print()
+        print(
+            "[GStreamer WARNING]"
+        )
+
+        print(
+            f"Origen: "
+            f"{mensaje.src.get_name()}"
+        )
+
+        print(
+            f"Warning: {warning}"
+        )
 
         if debug:
-            print(f"Debug: {debug}")
 
-    elif tipo == Gst.MessageType.EOS:
-        print("\n[GStreamer EOS]")
-        print("Fin del flujo recibido.")
+            print(
+                f"Debug: {debug}"
+            )
+
+    elif (
+        tipo
+        == Gst.MessageType.EOS
+    ):
+
+        print()
+        print(
+            "[GStreamer EOS]"
+        )
+
+        print(
+            "Fin del flujo recibido."
+        )
 
         loop.quit()
 
     return True
 
 
+# ============================================================
+# PIPELINE
+# ============================================================
+
 pipeline = Gst.parse_launch(
-    # Fuente de video
+
     FUENTE_VIDEO +
 
     "tee name=t "
 
-    # Rama 1: visualización directa
-    "t. ! queue leaky=downstream max-size-buffers=2 "
-    "max-size-bytes=0 max-size-time=0 ! "
+    # Rama 1: visualizacion
+    "t. ! "
+    "queue "
+    "leaky=downstream "
+    "max-size-buffers=2 "
+    "max-size-bytes=0 "
+    "max-size-time=0 ! "
     "videoconvert ! " +
+
     SINK_PREVIEW +
 
-    # Rama 2: procesamiento QR de la companera
-    "t. ! queue leaky=downstream max-size-buffers=2 "
-    "max-size-bytes=0 max-size-time=0 ! "
+    # Rama 2: QR
+    "t. ! "
+    "queue "
+    "leaky=downstream "
+    "max-size-buffers=2 "
+    "max-size-bytes=0 "
+    "max-size-time=0 ! "
     "videoconvert ! "
     "video/x-raw,format=BGR ! "
-    "appsink name=sink "
+    "appsink "
+    "name=sink "
     "emit-signals=true "
     "max-buffers=2 "
     "drop=true "
     "sync=false "
 
-    # Rama 3: codificacion H.264
-    "t. ! queue name=q_multimedia "
-    "max-size-buffers=8 max-size-bytes=0 "
-    "max-size-time=0 leaky=no ! "
+    # Rama 3: H264
+    "t. ! "
+    "queue "
+    "name=q_multimedia "
+    "max-size-buffers=8 "
+    "max-size-bytes=0 "
+    "max-size-time=0 "
+    "leaky=no ! "
     "videoconvert ! "
     "video/x-raw,format=NV12 ! " +
+
     ENCODER_H264 +
-    "h264parse ! "
+
+    "h264parse "
+    "config-interval=-1 ! "
     "tee name=tm "
 
-    # Rama 3A: almacenamiento MP4
-    "tm. ! queue name=q_grab "
-    "max-size-buffers=8 max-size-bytes=0 "
-    "max-size-time=0 leaky=no ! "
-    "mp4mux ! "
-    f"filesink location={ARCHIVO_EVIDENCIA} "
-
-    # Rama 3B: transmision RTP/UDP
-    "tm. ! queue name=q_stream "
-    "max-size-buffers=2 max-size-bytes=0 "
-    "max-size-time=0 leaky=no ! "
-    "rtph264pay pt=96 config-interval=1 ! "
-    f"udpsink host={DEST_HOST} port={DEST_PORT} sync=false"
+    # Streaming permanente
+    "tm. ! "
+    "queue "
+    "name=q_stream "
+    "max-size-buffers=2 "
+    "max-size-bytes=0 "
+    "max-size-time=0 "
+    "leaky=no ! "
+    "rtph264pay "
+    "pt=96 "
+    "config-interval=1 ! "
+    f"udpsink "
+    f"host={DEST_HOST} "
+    f"port={DEST_PORT} "
+    "sync=false"
 )
 
-appsink = pipeline.get_by_name("sink")
-appsink.connect("new-sample", nuevo_frame)
+
+# ============================================================
+# ELEMENTOS DEL PIPELINE
+# ============================================================
+
+appsink = pipeline.get_by_name(
+    "sink"
+)
+
+tm = pipeline.get_by_name(
+    "tm"
+)
+
+if appsink is None:
+
+    raise RuntimeError(
+        "No se encontro el appsink."
+    )
+
+if tm is None:
+
+    raise RuntimeError(
+        "No se encontro el tee H.264."
+    )
+
+appsink.connect(
+    "new-sample",
+    nuevo_frame
+)
+
+
+# ============================================================
+# BUS Y LOOP
+# ============================================================
+
 bus = pipeline.get_bus()
+
 bus.add_signal_watch()
-bus.connect("message", manejar_mensaje)
+
+bus.connect(
+    "message",
+    manejar_mensaje
+)
+
+loop = GLib.MainLoop()
+
+
+# ============================================================
+# SIGNALS
+# ============================================================
+
+def salir_del_loop():
+
+    loop.quit()
+
+    return False
+
+
+def manejar_sigterm(
+    signum,
+    frame
+):
+
+    print()
+
+    print(
+        "SIGTERM recibido. "
+        "Iniciando cierre coordinado."
+    )
+
+    cierre_solicitado.set()
+
+    GLib.idle_add(
+        salir_del_loop
+    )
+
+
+signal.signal(
+    signal.SIGTERM,
+    manejar_sigterm
+)
+
+
+# ============================================================
+# HILO QR
+# ============================================================
 
 hilo_qr = threading.Thread(
     target=procesar_qr,
@@ -398,112 +1133,222 @@ hilo_qr = threading.Thread(
 
 hilo_qr.start()
 
-# Iniciar el pipeline
-pipeline.set_state(Gst.State.PLAYING)
 
-# Esperar a que el pipeline alcance el estado PLAYING
-pipeline.get_state(5 * Gst.SECOND)
+# ============================================================
+# INICIAR PIPELINE
+# ============================================================
 
-# Generar el grafo DOT del pipeline integrado
+resultado_estado = pipeline.set_state(
+    Gst.State.PLAYING
+)
+
+if (
+    resultado_estado
+    == Gst.StateChangeReturn.FAILURE
+):
+
+    raise RuntimeError(
+        "No fue posible iniciar "
+        "el pipeline."
+    )
+
+pipeline.get_state(
+    5 * Gst.SECOND
+)
+
+
 Gst.debug_bin_to_dot_file(
     pipeline,
     Gst.DebugGraphDetails.ALL,
     "pipeline_integrado_PLAYING"
 )
 
-loop = GLib.MainLoop()
 
-# Indica que el sistema recibió una solicitud externa de detención.
-cierre_solicitado = threading.Event()
-
-
-# Solicitar la salida del GLib MainLoop de forma segura.
-def salir_del_loop():
-    loop.quit()
-    return False
+GLib.timeout_add(
+    30,
+    mostrar_video
+)
 
 
-# Manejar SIGTERM enviado, por ejemplo, por systemd.
-def manejar_sigterm(signum, frame):
-    print("\nSIGTERM recibido. Iniciando cierre coordinado.")
+print()
+print(
+    "Pipeline iniciado."
+)
 
-    cierre_solicitado.set()
+print(
+    "Muestra un codigo QR "
+    "frente a la camara."
+)
 
-    # Ejecutar loop.quit() dentro del contexto de GLib.
-    GLib.idle_add(salir_del_loop)
+print(
+    "Cada evento QR genera "
+    f"una evidencia de "
+    f"{DURACION_EVIDENCIA} segundos."
+)
 
+print(
+    f"Timeout de decision: "
+    f"{TIEMPO_MAX_DECISION:.1f} segundos."
+)
 
-signal.signal(signal.SIGTERM, manejar_sigterm)
+print(
+    f"Carpeta de evidencias: "
+    f"{CARPETA_EVIDENCIAS}"
+)
 
-# Mostrar el frame procesado desde el hilo principal
-GLib.timeout_add(30, mostrar_video)
+print(
+    "Presiona Ctrl+C para detenerlo."
+)
 
-print("Pipeline iniciado.")
-print("Muestra un código QR frente a la cámara.")
-print("Presiona Ctrl+C para detenerlo.\n")
+print()
+
 
 try:
+
     loop.run()
 
 except KeyboardInterrupt:
-    print("\nCtrl+C recibido. Iniciando cierre coordinado.")
+
+    print()
+
+    print(
+        "Ctrl+C recibido. "
+        "Iniciando cierre coordinado."
+    )
+
     cierre_solicitado.set()
 
 
-# Si la detención fue solicitada mediante Ctrl+C o SIGTERM,
-# enviar EOS antes de pasar el pipeline a NULL.
-if cierre_solicitado.is_set():
-    print("Enviando EOS al pipeline...")
+# ============================================================
+# CIERRE
+# ============================================================
 
-    pipeline.send_event(Gst.Event.new_eos())
+if cierre_solicitado.is_set():
+
+    print(
+        "Enviando EOS "
+        "al pipeline..."
+    )
+
+    pipeline.send_event(
+        Gst.Event.new_eos()
+    )
 
     mensaje = bus.timed_pop_filtered(
         5 * Gst.SECOND,
-        Gst.MessageType.EOS | Gst.MessageType.ERROR
+        Gst.MessageType.EOS
+        | Gst.MessageType.ERROR
     )
 
     if mensaje is None:
-        print("No se recibió EOS dentro del tiempo de espera.")
 
-    elif mensaje.type == Gst.MessageType.EOS:
-        print("EOS recibido correctamente. Cierre coordinado.")
+        print(
+            "No se recibio EOS "
+            "dentro del tiempo "
+            "de espera."
+        )
 
-    elif mensaje.type == Gst.MessageType.ERROR:
-        error, debug = mensaje.parse_error()
+    elif (
+        mensaje.type
+        == Gst.MessageType.EOS
+    ):
 
-        print(f"ERROR durante el cierre: {error}")
+        print(
+            "EOS recibido correctamente. "
+            "Cierre coordinado."
+        )
+
+    elif (
+        mensaje.type
+        == Gst.MessageType.ERROR
+    ):
+
+        error, debug = (
+            mensaje.parse_error()
+        )
+
+        print(
+            f"ERROR durante "
+            f"el cierre: {error}"
+        )
 
         if debug:
-            print(f"Debug: {debug}")
+
+            print(
+                f"Debug: {debug}"
+            )
 
 
-# Liberar los recursos utilizados por la aplicación.
+# ============================================================
+# LIBERAR RECURSOS
+# ============================================================
+
 detener.set()
 
-pipeline.set_state(Gst.State.NULL)
+pipeline.set_state(
+    Gst.State.NULL
+)
 
-hilo_qr.join(timeout=1)
+hilo_qr.join(
+    timeout=1
+)
 
 cv2.destroyAllWindows()
 
-print(f"Total de frames recibidos: {contador}")
+executor_validacion.shutdown(
+    wait=False,
+    cancel_futures=True
+)
+
+
+# ============================================================
+# RESULTADOS
+# ============================================================
+
+print()
+
+print(
+    f"Total de frames recibidos: "
+    f"{contador}"
+)
 
 if callbacks_medidos > 0:
+
     promedio_ms = (
-        tiempo_callback_total_ns / callbacks_medidos
+        tiempo_callback_total_ns
+        / callbacks_medidos
     ) / 1_000_000
 
-    maximo_ms = tiempo_callback_max_ns / 1_000_000
+    maximo_ms = (
+        tiempo_callback_max_ns
+        / 1_000_000
+    )
 
-    print(f"Callbacks medidos: {callbacks_medidos}")
-    print(f"Tiempo promedio del callback: {promedio_ms:.3f} ms")
-    print(f"Tiempo máximo del callback: {maximo_ms:.3f} ms")
+    print(
+        f"Callbacks medidos: "
+        f"{callbacks_medidos}"
+    )
+
+    print(
+        f"Tiempo promedio "
+        f"del callback: "
+        f"{promedio_ms:.3f} ms"
+    )
+
+    print(
+        f"Tiempo maximo "
+        f"del callback: "
+        f"{maximo_ms:.3f} ms"
+    )
 
 
-# Si el pipeline terminó debido a un error fatal,
-# devolver un código de salida distinto de cero.
-# Esto permitirá utilizar Restart=on-failure en systemd.
 if error_fatal.is_set():
-    print("Terminación por error fatal. Código de salida: 1")
-    raise SystemExit(1)
 
+    print(
+        "Terminacion por error fatal. "
+        "Codigo de salida: 1"
+    )
+
+    raise SystemExit(
+        1
+    )
