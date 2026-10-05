@@ -21,12 +21,11 @@ Los comandos destructivos o de bajo nivel —por ejemplo `dd`, cambios de red, s
 
 En la fase de integración y documentación final se utilizó:
 
-```text
-OpenAI ChatGPT
-Modelo: GPT-5.6 Sol
-```
+- **OpenAI ChatGPT**, utilizado para apoyo técnico durante la integración del sistema, análisis de errores, así como para la organización y redacción de documentación. En la etapa final de integración y documentación se utilizó el modelo **GPT-5.6 Sol**.
+- **Google Gemini**, utilizado como herramienta de consulta y apoyo en investigación técnica.
+- **Google NotebookLM (Gemini NotebookLM)**, utilizado principalmente para organizar, consultar y resumir fuentes y documentos durante la etapa de investigación.
+- **Anthropic Claude**, utilizado como herramienta complementaria de consulta, programación y revisión técnica.
 
-Si durante otras fases se utilizaron modelos o herramientas diferentes, deben agregarse aquí antes de entregar.
 
 ## Nivel de uso
 
@@ -35,7 +34,6 @@ Se considera un uso de **asistencia técnica y documental**:
 - diagnóstico guiado;
 - explicación;
 - revisión;
-- generación de borradores;
-- propuestas de comandos y pruebas.
+- generación de borradores.
 
 Las decisiones finales de arquitectura, ejecución sobre hardware, selección de resultados y validación corresponden al equipo del proyecto.
