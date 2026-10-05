@@ -5,8 +5,6 @@
 Durante el desarrollo se utilizó inteligencia artificial como herramienta de apoyo para:
 
 - explicar conceptos de Yocto, GStreamer, Linux, Docker y QEMU;
-- proponer pasos de diagnóstico;
-- revisar comandos antes de ejecutarlos;
 - ayudar a interpretar logs;
 - organizar documentación técnica;
 - revisar consistencia entre código, receta Yocto y arquitectura;
