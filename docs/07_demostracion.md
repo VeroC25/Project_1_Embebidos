@@ -40,7 +40,7 @@ Abrir logs:
 journalctl -fu control-acceso -n 0
 ```
 
-## 3. Orden recomendado de la demo
+## 3. Orden de la demo
 
 ```mermaid
 flowchart TD
@@ -73,7 +73,7 @@ QR detectado: MC001
 Resultado: ACCESO AUTORIZADO
 ```
 
-En la versión final con circuito, mostrar también la salida de apertura.
+Mostrar también la salida de apertura.
 
 ### Paso 4 — Acceso denegado
 
@@ -104,7 +104,6 @@ Explicar:
 
 ## 4. Demostración complementaria de dos contenedores
 
-Si el profesor la solicita:
 
 ```bash
 docker compose -f compose.yaml -f compose.web.yaml up --build -d
@@ -118,22 +117,3 @@ Realizar después de reconstruir la imagen QEMU con el código final.
 
 Explicar que QEMU sustituye la cámara física por una fuente sintética y permite demostrar el arranque de la imagen y la aplicación fuera del hardware real.
 
-## 6. Preguntas que conviene poder responder
-
-**¿Por qué GStreamer?**  
-Permite componer, negociar y depurar pipelines multimedia y separar ramas de análisis, evidencia y red.
-
-**¿Por qué OpenCV?**  
-Se utiliza para detectar y decodificar el QR a partir de frames entregados por GStreamer.
-
-**¿Por qué systemd?**  
-Para inicio automático, supervisión y política de recuperación ante fallos.
-
-**¿Por qué UDP/RTP?**  
-Para transmisión de video en tiempo real con menor sobrecarga y tolerancia a pérdidas.
-
-**¿Dónde persisten los datos?**  
-En `/var/lib/control-acceso`.
-
-**¿El encoder es hardware?**  
-No en la versión actual: se usa `x264enc`. La ruta hardware continúa documentada como limitación pendiente.
