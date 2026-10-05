@@ -37,6 +37,3 @@ Se separa claramente entre:
 
 - **Validado en Raspberry Pi/Yocto**: observado en el hardware objetivo.
 - **Validado en host/Docker/QEMU**: comprobado fuera del hardware final.
-- **Pendiente**: todavía requiere implementación o evidencia final.
-
-Esto evita presentar como resultado final una condición que solo haya sido ensayada en Ubuntu o simulación.
