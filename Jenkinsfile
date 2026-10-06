@@ -33,6 +33,19 @@ pipeline {
             }
         }
 
+        stage('Validar retencion H7') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        python3 tests/host/test_retention.py
+                '''
+            }
+        }
+
         stage('Ejecutar pruebas') {
             steps {
                 sh '''
