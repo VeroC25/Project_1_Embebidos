@@ -102,6 +102,10 @@ La documentación técnica completa está en [docs/](docs/README.md):
 - [Guion de demostración](docs/07_demostracion.md)
 - [Bitácora técnica resumida](docs/08_bitacora_trabajo.md)
 - [Uso de inteligencia artificial](docs/09_uso_ia.md)
+- [Fundamentos y flujo de trabajo: Yocto + GStreamer](docs/10_fundamentos_yocto_gstreamer.md)
+- [Casos de uso](docs/11_casos_de_uso.md)
+- [Requerimientos del sistema](docs/12_requerimientos_del_sistema.md)
+- [Trazabilidad con la metodología del instructivo](docs/13_trazabilidad_metodologia.md)
 
 ## Estructura principal del repositorio
 

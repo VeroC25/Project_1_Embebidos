@@ -31,6 +31,18 @@ Esta carpeta concentra la documentación técnica del Proyecto 1.
 9. [Uso de inteligencia artificial](09_uso_ia.md)  
    Declaración de alcance y uso de herramientas de IA.
 
+10. [Fundamentos y flujo de trabajo: Yocto Project y GStreamer](10_fundamentos_yocto_gstreamer.md)  
+    Flujo de Yocto, características de GStreamer, prototipos gst-launch, dependencias y recetas.
+
+11. [Casos de uso](11_casos_de_uso.md)  
+    Actores, CU-01 a CU-04, flujos, relaciones y estado de implementación.
+
+12. [Requerimientos del sistema](12_requerimientos_del_sistema.md)  
+    RF, RD, RI, RC, RP, RQ y RU, con trazabilidad y estado actual.
+
+13. [Trazabilidad con la metodología del instructivo](13_trazabilidad_metodologia.md)  
+    Matriz de cumplimiento punto por punto con evidencia directa en el repositorio.
+
 ## Criterio de documentación
 
 Se separa claramente entre:
