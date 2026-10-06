@@ -33,7 +33,7 @@ pipeline {
             }
         }
 
-        stage('Validar retencion H7') {
+        stage('H7 - Retencion') {
             steps {
                 sh '''
                     docker run --rm \
@@ -46,7 +46,7 @@ pipeline {
             }
         }
 
-        stage('Validar error fatal E3') {
+        stage('E3 - Error fatal') {
             steps {
                 sh '''
                     docker run --rm \
@@ -59,7 +59,85 @@ pipeline {
             }
         }
 
-        stage('Ejecutar pruebas') {
+        stage('A1 - Caps negociados') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/rpi/test_a1_caps.sh qemu
+                '''
+            }
+        }
+
+        stage('A2 - Formato de pixel') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/rpi/test_a2_pixel_format.sh qemu
+                '''
+            }
+        }
+
+        stage('A3 - Framerate real') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        python3 tests/rpi/test_a3_framerate.py qemu 10
+                '''
+            }
+        }
+
+        stage('A4 - Capsfilters') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        python3 tests/rpi/test_a4_capsfilters.py qemu
+                '''
+            }
+        }
+
+        stage('A5 - Conversiones') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/rpi/test_a5_conversions.sh qemu
+                '''
+            }
+        }
+
+        stage('A6 - Grafo pipeline') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/rpi/test_a6_pipeline_graph.sh qemu
+                '''
+            }
+        }
+
+        stage('Ejecutar smoke tests') {
             steps {
                 sh '''
                     docker run --rm \
@@ -80,6 +158,15 @@ pipeline {
     }
 
     post {
+
+        always {
+            archiveArtifacts(
+                artifacts: 'resultados/**/*',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
+        }
+
         success {
             echo 'Todas las pruebas terminaron correctamente.'
         }
