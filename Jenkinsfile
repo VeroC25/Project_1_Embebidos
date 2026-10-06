@@ -46,6 +46,19 @@ pipeline {
             }
         }
 
+        stage('Validar error fatal E3') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/host/test_error_fatal.sh
+                '''
+            }
+        }
+
         stage('Ejecutar pruebas') {
             steps {
                 sh '''

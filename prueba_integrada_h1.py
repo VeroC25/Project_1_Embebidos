@@ -23,6 +23,7 @@ Gst.init(None)
 
 MODO = os.getenv("CONTROL_ACCESO_MODE", "rpi").lower()
 MOSTRAR_GUI = os.getenv("CONTROL_ACCESO_GUI", "0") == "1"
+VIDEO_DEVICE = os.getenv("VIDEO_DEVICE", "/dev/video0")
 
 DEST_HOST = os.getenv("DEST_HOST", "127.0.0.1")
 DEST_PORT = int(os.getenv("DEST_PORT", "5000"))
@@ -155,7 +156,7 @@ if MODO == "qemu":
 
 elif MODO == "host":
     FUENTE_VIDEO = (
-        "v4l2src device=/dev/video0 ! "
+        f"v4l2src device={VIDEO_DEVICE} ! "
         "image/jpeg,width=1280,height=720,framerate=30/1 ! "
         "jpegdec ! "
     )
@@ -1238,9 +1239,34 @@ if (
         "el pipeline."
     )
 
-pipeline.get_state(
+resultado_arranque, estado_actual, estado_pendiente = pipeline.get_state(
     5 * Gst.SECOND
 )
+
+if (
+    resultado_arranque == Gst.StateChangeReturn.FAILURE
+    or estado_actual != Gst.State.PLAYING
+):
+    print()
+    print("No fue posible llevar el pipeline a PLAYING.")
+    print(f"Estado alcanzado: {estado_actual.value_nick}")
+
+    detener.set()
+
+    pipeline.set_state(
+        Gst.State.NULL
+    )
+
+    hilo_qr.join(
+        timeout=1
+    )
+
+    executor_validacion.shutdown(
+        wait=False,
+        cancel_futures=True
+    )
+
+    raise SystemExit(1)
 
 
 Gst.debug_bin_to_dot_file(
