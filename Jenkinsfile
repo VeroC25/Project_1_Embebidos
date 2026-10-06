@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -18,6 +17,19 @@ pipeline {
         stage('Construir imagen Docker') {
             steps {
                 sh 'docker build -t control-acceso-dev:ci .'
+            }
+        }
+
+        stage('Validar repositorio') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        bash tests/host/test_repo_consistency.sh
+                '''
             }
         }
 
@@ -51,4 +63,3 @@ pipeline {
         }
     }
 }
-
