@@ -30,9 +30,25 @@ DEST_PORT = int(os.getenv("DEST_PORT", "5000"))
 
 TIEMPO_MAX_DECISION = 10.0
 DURACION_EVIDENCIA = 60
-TIEMPO_REARME_QR = 1.0
+TIEMPO_REARME_QR = 3.0
+TIEMPO_BLOQUEO_MISMO_QR = 60.0
 DIAS_RETENCION_VIDEO = 7
 DIAS_RETENCION_BITACORA = 30
+
+# Apertura de puerta
+TIEMPO_APERTURA = 2.0
+GPIO_APERTURA_SYSFS = 529  # GPIO17 BCM = base 512 + 17
+GPIO_APERTURA_HABILITADO = (
+    MODO == "rpi"
+    and os.getenv("CONTROL_ACCESO_GPIO", "1") == "1"
+)
+
+RUTA_GPIO_APERTURA = (
+    f"/sys/class/gpio/gpio{GPIO_APERTURA_SYSFS}"
+)
+
+temporizador_apertura = None
+bloqueo_gpio = threading.Lock()
 
 DATA_DIR = os.getenv(
     "CONTROL_ACCESO_DATA_DIR",
@@ -145,6 +161,182 @@ def limpiar_bitacora_antigua():
 
 
 # ============================================================
+# CONTROL GPIO DE APERTURA
+# ============================================================
+
+def escribir_gpio_apertura(valor):
+
+    if not GPIO_APERTURA_HABILITADO:
+        return
+
+    ruta_value = os.path.join(
+        RUTA_GPIO_APERTURA,
+        "value"
+    )
+
+    with open(
+        ruta_value,
+        "w",
+        encoding="utf-8"
+    ) as archivo:
+
+        archivo.write(
+            "1" if valor else "0"
+        )
+
+
+def inicializar_gpio_apertura():
+
+    if not GPIO_APERTURA_HABILITADO:
+        print(
+            "GPIO de apertura: "
+            "deshabilitado."
+        )
+        return
+
+    if not os.path.isdir(
+        RUTA_GPIO_APERTURA
+    ):
+
+        with open(
+            "/sys/class/gpio/export",
+            "w",
+            encoding="utf-8"
+        ) as archivo:
+
+            archivo.write(
+                str(GPIO_APERTURA_SYSFS)
+            )
+
+        for _ in range(20):
+
+            if os.path.isdir(
+                RUTA_GPIO_APERTURA
+            ):
+                break
+
+            time.sleep(0.05)
+
+    if not os.path.isdir(
+        RUTA_GPIO_APERTURA
+    ):
+
+        raise RuntimeError(
+            "No fue posible exportar "
+            "el GPIO de apertura."
+        )
+
+    ruta_direction = os.path.join(
+        RUTA_GPIO_APERTURA,
+        "direction"
+    )
+
+    # "low" configura salida y garantiza
+    # estado seguro desde el inicio.
+    with open(
+        ruta_direction,
+        "w",
+        encoding="utf-8"
+    ) as archivo:
+
+        archivo.write("low")
+
+    print(
+        "GPIO de apertura preparado: "
+        "BCM17 / sysfs 529, estado LOW."
+    )
+
+
+def desactivar_apertura():
+
+    global temporizador_apertura
+
+    if not GPIO_APERTURA_HABILITADO:
+        return
+
+    with bloqueo_gpio:
+
+        if temporizador_apertura is not None:
+
+            temporizador_apertura.cancel()
+            temporizador_apertura = None
+
+        try:
+
+            escribir_gpio_apertura(
+                False
+            )
+
+        except OSError as error:
+
+            print(
+                "[ERROR GPIO] "
+                f"No fue posible desactivar "
+                f"la apertura: {error}"
+            )
+
+            return
+
+    print(
+        "Salida de apertura: "
+        "DESACTIVADA"
+    )
+
+
+def activar_apertura():
+
+    global temporizador_apertura
+
+    if not GPIO_APERTURA_HABILITADO:
+        return
+
+    with bloqueo_gpio:
+
+        if temporizador_apertura is not None:
+
+            temporizador_apertura.cancel()
+
+        try:
+
+            escribir_gpio_apertura(
+                True
+            )
+
+        except OSError as error:
+
+            print(
+                "[ERROR GPIO] "
+                f"No fue posible activar "
+                f"la apertura: {error}"
+            )
+
+            try:
+                escribir_gpio_apertura(
+                    False
+                )
+            except OSError:
+                pass
+
+            return
+
+        temporizador_apertura = (
+            threading.Timer(
+                TIEMPO_APERTURA,
+                desactivar_apertura
+            )
+        )
+
+        temporizador_apertura.daemon = True
+        temporizador_apertura.start()
+
+    print(
+        "Salida de apertura: "
+        "ACTIVADA "
+        f"durante {TIEMPO_APERTURA:.1f} s"
+    )
+
+
+# ============================================================
 # FUENTE DE VIDEO
 # ============================================================
 
@@ -202,10 +394,53 @@ detector = cv2.QRCodeDetector()
 contador = 0
 ultimo_codigo = ""
 ultimo_qr_visto_t = 0.0
+ultimo_evento_por_codigo = {}
 
 tiempo_callback_total_ns = 0
 tiempo_callback_max_ns = 0
 callbacks_medidos = 0
+
+
+def permitir_evento_qr(codigo):
+
+    ahora = time.monotonic()
+
+    ultimo_evento = (
+        ultimo_evento_por_codigo.get(
+            codigo
+        )
+    )
+
+    if (
+        ultimo_evento is not None
+        and (
+            ahora
+            - ultimo_evento
+        )
+        < TIEMPO_BLOQUEO_MISMO_QR
+    ):
+
+        restante = (
+            TIEMPO_BLOQUEO_MISMO_QR
+            - (
+                ahora
+                - ultimo_evento
+            )
+        )
+
+        print(
+            f"QR repetido ignorado: "
+            f"{codigo} "
+            f"({restante:.1f} s restantes)"
+        )
+
+        return False
+
+    ultimo_evento_por_codigo[
+        codigo
+    ] = ahora
+
+    return True
 
 
 # ============================================================
@@ -215,7 +450,8 @@ callbacks_medidos = 0
 executor_validacion = ThreadPoolExecutor(max_workers=1)
 
 identificadores_autorizados = {
-    "MC001"
+    "MC001",
+    "MC002"
 }
 
 
@@ -798,11 +1034,13 @@ def procesar_qr():
                     3
                 )
 
-        if data:
+        if puntos is not None:
 
             ultimo_qr_visto_t = (
                 time.monotonic()
             )
+
+        if data:
 
             if puntos is not None:
 
@@ -824,6 +1062,15 @@ def procesar_qr():
                 )
 
             if data != ultimo_codigo:
+
+                # Se memoriza inmediatamente para evitar
+                # reintentos cuadro por cuadro.
+                ultimo_codigo = data
+
+                if not permitir_evento_qr(
+                    data
+                ):
+                    continue
 
                 print()
                 print(
@@ -873,6 +1120,8 @@ def procesar_qr():
                         "AUTORIZADO"
                     )
 
+                    activar_apertura()
+
                 else:
 
                     print(
@@ -897,7 +1146,8 @@ def procesar_qr():
         else:
 
             if (
-                ultimo_codigo
+                puntos is None
+                and ultimo_codigo
                 and (
                     time.monotonic()
                     - ultimo_qr_visto_t
@@ -1054,6 +1304,9 @@ def manejar_mensaje(
 # Aplicar política de retención al iniciar la aplicación
 limpiar_evidencias_antiguas()
 limpiar_bitacora_antigua()
+
+# Preparar la salida de apertura en estado seguro.
+inicializar_gpio_apertura()
 
 # ============================================================
 # PIPELINE
@@ -1394,6 +1647,9 @@ if cierre_solicitado.is_set():
 # ============================================================
 # LIBERAR RECURSOS
 # ============================================================
+
+# Estado seguro antes de finalizar.
+desactivar_apertura()
 
 detener.set()
 
