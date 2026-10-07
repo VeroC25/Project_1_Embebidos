@@ -133,6 +133,50 @@ pipeline {
             }
         }
 
+        stage('A2 - Formato Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+                    rm -f resultados/A2_formato_rpi.log
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando A2 a Raspberry..."
+
+                    scp -o BatchMode=yes                         tests/rpi/test_a2_pixel_format.sh                         "$RPI_HOST:/tmp/test_a2_pixel_format.sh"
+
+                    echo "Ejecutando A2 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        systemctl stop control-acceso
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+                        chmod +x /tmp/test_a2_pixel_format.sh
+                        cd /tmp
+                        ./test_a2_pixel_format.sh rpi x264enc
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencia A2..."
+
+                    scp -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/A2_formato_rpi.log"                         resultados/A2_formato_rpi.log                         || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('A3 - Framerate real') {
             steps {
                 sh '''

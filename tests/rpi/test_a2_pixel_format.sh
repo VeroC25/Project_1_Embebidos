@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
 MODO="${1:-qemu}"
 ENCODER="${2:-x264enc}"
@@ -16,10 +16,19 @@ echo " Encoder: $ENCODER"
 echo "========================================"
 echo
 
+# ============================================================
+# Verificar que el encoder solicitado exista
+# ============================================================
+
 if ! gst-inspect-1.0 "$ENCODER" > /dev/null 2>&1; then
     echo "FAIL: el encoder '$ENCODER' no esta disponible."
     exit 1
 fi
+
+
+# ============================================================
+# Ejecutar pipeline segun plataforma
+# ============================================================
 
 case "$MODO" in
 
@@ -34,12 +43,17 @@ case "$MODO" in
             video/x-raw,width=1280,height=720,framerate=30/1 ! \
             videoconvert ! \
             video/x-raw,format=NV12 ! \
-            $ENCODER name=encoder_a2 \
-            tune=zerolatency bitrate=2000 \
-            speed-preset=veryfast key-int-max=30 ! \
+            "$ENCODER" name=encoder_a2 \
+            tune=zerolatency \
+            bitrate=2000 \
+            speed-preset=veryfast \
+            key-int-max=30 ! \
             fakesink sync=false \
-            2>&1 | tee "$LOG"
+            > "$LOG" 2>&1
+
+        cat "$LOG"
         ;;
+
 
     rpi)
 
@@ -48,29 +62,60 @@ case "$MODO" in
         echo "Formato objetivo hacia encoder: NV12"
         echo
 
+        # Verificar que la fuente de cámara de libcamera esté disponible.
         if ! gst-inspect-1.0 libcamerasrc > /dev/null 2>&1; then
             echo "FAIL: libcamerasrc no esta disponible."
             exit 1
         fi
 
+        # libcamerasrc no soporta num-buffers en nuestra imagen Yocto.
+        # Por eso el pipeline se ejecuta en background durante 5 segundos
+        # y luego se detiene mediante SIGINT.
         gst-launch-1.0 -v \
-            libcamerasrc num-buffers=90 ! \
+            libcamerasrc ! \
             video/x-raw,width=1280,height=720,framerate=30/1 ! \
             videoconvert ! \
             video/x-raw,format=NV12 ! \
-            $ENCODER name=encoder_a2 ! \
+            "$ENCODER" name=encoder_a2 \
+            tune=zerolatency \
+            bitrate=2000 \
+            speed-preset=veryfast \
+            key-int-max=30 ! \
             fakesink sync=false \
-            2>&1 | tee "$LOG"
+            > "$LOG" 2>&1 &
+
+        GST_PID=$!
+
+        echo "Pipeline iniciado con PID $GST_PID."
+        echo "Verificando negociacion durante 5 segundos..."
+        echo
+
+        sleep 5
+
+        kill -INT "$GST_PID" 2>/dev/null || true
+        wait "$GST_PID" 2>/dev/null || true
+
+        cat "$LOG"
         ;;
+
 
     *)
 
         echo "Uso:"
         echo "  $0 qemu"
-        echo "  $0 rpi ENCODER"
+        echo "  $0 rpi"
+        echo
+        echo "Opcionalmente:"
+        echo "  $0 rpi x264enc"
         exit 1
         ;;
+
 esac
+
+
+# ============================================================
+# Buscar los caps negociados en la entrada del encoder
+# ============================================================
 
 echo
 echo "========================================"
@@ -89,14 +134,25 @@ fi
 
 echo "$CAPS_ENCODER"
 
+
+# ============================================================
+# Validar formato NV12
+# ============================================================
+
 if ! echo "$CAPS_ENCODER" | grep -q "format=(string)NV12"; then
     echo
     echo "FAIL: el encoder no negocio NV12 en su entrada."
     exit 1
 fi
 
+
+# ============================================================
+# Resultado
+# ============================================================
+
 echo
 echo "PASS: el encoder recibio video/x-raw en formato NV12."
+
 echo
 echo "Evidencia guardada en:"
 echo "$LOG"
