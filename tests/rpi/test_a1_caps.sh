@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
 MODO="${1:-qemu}"
 
@@ -43,12 +43,25 @@ case "$MODO" in
         fi
 
         gst-launch-1.0 -v \
-            libcamerasrc num-buffers=90 ! \
+            libcamerasrc ! \
             video/x-raw,width=1280,height=720,framerate=30/1 ! \
             videoconvert ! \
             video/x-raw,format=NV12 ! \
             fakesink sync=false \
-            2>&1 | tee "$LOG"
+            > "$LOG" 2>&1 &
+
+        GST_PID=$!
+
+        echo "Pipeline iniciado con PID $GST_PID."
+        echo "Capturando negociacion durante 5 segundos..."
+        echo
+
+        sleep 5
+
+        kill -INT "$GST_PID" 2>/dev/null || true
+        wait "$GST_PID" 2>/dev/null || true
+
+        cat "$LOG"
         ;;
 
     *)
@@ -58,6 +71,7 @@ case "$MODO" in
         echo "  $0 rpi"
         exit 1
         ;;
+
 esac
 
 
@@ -78,6 +92,7 @@ echo "$CAPS"
 echo
 echo "PASS: los caps fueron leidos de la"
 echo "negociacion real de GStreamer."
+
 echo
 echo "Evidencia guardada en:"
 echo "$LOG"

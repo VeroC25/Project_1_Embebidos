@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        RPI_HOST = 'root@10.42.0.113'
+    }
+
     options {
         skipDefaultCheckout(true)
         timestamps()
@@ -68,6 +72,50 @@ pipeline {
                         -w /proyecto \
                         control-acceso-dev:ci \
                         bash tests/rpi/test_a1_caps.sh qemu
+                '''
+            }
+        }
+
+        stage('A1 - Caps Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+                    rm -f resultados/A1_caps_rpi.log
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando A1 a Raspberry..."
+
+                    scp -o BatchMode=yes                         tests/rpi/test_a1_caps.sh                         "$RPI_HOST:/tmp/test_a1_caps.sh"
+
+                    echo "Ejecutando A1 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        systemctl stop control-acceso
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+                        chmod +x /tmp/test_a1_caps.sh
+                        cd /tmp
+                        ./test_a1_caps.sh rpi
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencia..."
+
+                    scp -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/A1_caps_rpi.log"                         resultados/A1_caps_rpi.log                         || true
+
+                    exit "$TEST_STATUS"
                 '''
             }
         }
