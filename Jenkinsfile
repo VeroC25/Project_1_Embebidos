@@ -287,6 +287,59 @@ pipeline {
         // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
+        stage('A3 - Framerate Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+                    rm -f resultados/A3_framerate_rpi.txt
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando A3 a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a3_framerate.py \
+                        "$RPI_HOST:/tmp/test_a3_framerate.py"
+
+                    echo "Ejecutando A3 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        systemctl stop control-acceso
+
+                        mkdir -p /tmp/resultados
+                        rm -f /tmp/resultados/A3_framerate_rpi.txt
+
+                        cd /tmp
+
+                        python3 /tmp/test_a3_framerate.py rpi 10
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencia A3..."
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A3_framerate_rpi.txt" \
+                        resultados/A3_framerate_rpi.txt \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('A4 - Capsfilters QEMU') {
             when {
                 expression {
