@@ -3,14 +3,25 @@ pipeline {
 
     environment {
         RPI_HOST = 'root@10.42.0.113'
+
+        // Las pruebas A1-A6 de QEMU quedan desactivadas.
+        // Para volver a habilitarlas, cambiar false por true.
+        RUN_QEMU = 'false'
     }
 
     options {
         skipDefaultCheckout(true)
         timestamps()
+
+        // Evita que dos builds utilicen la Raspberry al mismo tiempo.
+        disableConcurrentBuilds()
     }
 
     stages {
+
+        // ============================================================
+        // OBTENER CODIGO
+        // ============================================================
 
         stage('Obtener codigo') {
             steps {
@@ -18,11 +29,21 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // CONSTRUIR IMAGEN DOCKER
+        // ============================================================
+
         stage('Construir imagen Docker') {
             steps {
                 sh 'docker build -t control-acceso-dev:ci .'
             }
         }
+
+
+        // ============================================================
+        // PRUEBAS GENERALES DEL REPOSITORIO
+        // ============================================================
 
         stage('Validar repositorio') {
             steps {
@@ -37,6 +58,7 @@ pipeline {
             }
         }
 
+
         stage('H7 - Retencion') {
             steps {
                 sh '''
@@ -49,6 +71,7 @@ pipeline {
                 '''
             }
         }
+
 
         stage('E3 - Error fatal') {
             steps {
@@ -63,7 +86,19 @@ pipeline {
             }
         }
 
-        stage('A1 - Caps negociados') {
+
+        // ============================================================
+        // A1 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A1 - Caps negociados QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -76,6 +111,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // A1 - RASPBERRY PI REAL
+        // ============================================================
+
         stage('A1 - Caps Raspberry real') {
             steps {
                 sh '''
@@ -85,14 +125,18 @@ pipeline {
                     rm -f resultados/A1_caps_rpi.log
 
                     cleanup_rpi() {
-                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
                     }
 
                     trap cleanup_rpi EXIT
 
                     echo "Copiando A1 a Raspberry..."
 
-                    scp -o BatchMode=yes                         tests/rpi/test_a1_caps.sh                         "$RPI_HOST:/tmp/test_a1_caps.sh"
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a1_caps.sh \
+                        "$RPI_HOST:/tmp/test_a1_caps.sh"
 
                     echo "Ejecutando A1 sobre Raspberry Pi real..."
 
@@ -100,10 +144,14 @@ pipeline {
 
                     ssh -o BatchMode=yes "$RPI_HOST" '
                         systemctl stop control-acceso
-                        rm -rf /tmp/resultados
+
                         mkdir -p /tmp/resultados
+                        rm -f /tmp/resultados/A1_caps_rpi.log
+
                         chmod +x /tmp/test_a1_caps.sh
+
                         cd /tmp
+
                         ./test_a1_caps.sh rpi
                     '
 
@@ -111,16 +159,31 @@ pipeline {
 
                     set -e
 
-                    echo "Recuperando evidencia..."
+                    echo "Recuperando evidencia A1..."
 
-                    scp -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/A1_caps_rpi.log"                         resultados/A1_caps_rpi.log                         || true
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A1_caps_rpi.log" \
+                        resultados/A1_caps_rpi.log \
+                        || true
 
                     exit "$TEST_STATUS"
                 '''
             }
         }
 
-        stage('A2 - Formato de pixel') {
+
+        // ============================================================
+        // A2 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A2 - Formato de pixel QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -133,6 +196,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // A2 - RASPBERRY PI REAL
+        // ============================================================
+
         stage('A2 - Formato Raspberry real') {
             steps {
                 sh '''
@@ -142,14 +210,18 @@ pipeline {
                     rm -f resultados/A2_formato_rpi.log
 
                     cleanup_rpi() {
-                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
                     }
 
                     trap cleanup_rpi EXIT
 
                     echo "Copiando A2 a Raspberry..."
 
-                    scp -o BatchMode=yes                         tests/rpi/test_a2_pixel_format.sh                         "$RPI_HOST:/tmp/test_a2_pixel_format.sh"
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a2_pixel_format.sh \
+                        "$RPI_HOST:/tmp/test_a2_pixel_format.sh"
 
                     echo "Ejecutando A2 sobre Raspberry Pi real..."
 
@@ -157,10 +229,14 @@ pipeline {
 
                     ssh -o BatchMode=yes "$RPI_HOST" '
                         systemctl stop control-acceso
-                        rm -rf /tmp/resultados
+
                         mkdir -p /tmp/resultados
+                        rm -f /tmp/resultados/A2_formato_rpi.log
+
                         chmod +x /tmp/test_a2_pixel_format.sh
+
                         cd /tmp
+
                         ./test_a2_pixel_format.sh rpi x264enc
                     '
 
@@ -170,14 +246,29 @@ pipeline {
 
                     echo "Recuperando evidencia A2..."
 
-                    scp -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/A2_formato_rpi.log"                         resultados/A2_formato_rpi.log                         || true
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A2_formato_rpi.log" \
+                        resultados/A2_formato_rpi.log \
+                        || true
 
                     exit "$TEST_STATUS"
                 '''
             }
         }
 
-        stage('A3 - Framerate real') {
+
+        // ============================================================
+        // A3 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A3 - Framerate QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -190,7 +281,19 @@ pipeline {
             }
         }
 
-        stage('A4 - Capsfilters') {
+
+        // ============================================================
+        // A4 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A4 - Capsfilters QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -203,7 +306,19 @@ pipeline {
             }
         }
 
-        stage('A5 - Conversiones') {
+
+        // ============================================================
+        // A5 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A5 - Conversiones QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -216,7 +331,19 @@ pipeline {
             }
         }
 
-        stage('A6 - Grafo pipeline') {
+
+        // ============================================================
+        // A6 - QEMU
+        // DESACTIVADO TEMPORALMENTE
+        // ============================================================
+
+        stage('A6 - Grafo pipeline QEMU') {
+            when {
+                expression {
+                    env.RUN_QEMU == 'true'
+                }
+            }
+
             steps {
                 sh '''
                     docker run --rm \
@@ -228,6 +355,11 @@ pipeline {
                 '''
             }
         }
+
+
+        // ============================================================
+        // SMOKE TESTS
+        // ============================================================
 
         stage('Ejecutar smoke tests') {
             steps {
@@ -242,12 +374,22 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // COMUNICACION ENTRE CONTENEDORES
+        // ============================================================
+
         stage('Probar comunicacion Docker') {
             steps {
                 sh 'bash scripts/test_compose.sh'
             }
         }
     }
+
+
+    // ================================================================
+    // RESULTADOS
+    // ================================================================
 
     post {
 
