@@ -520,9 +520,10 @@ def iniciar_grabacion_evento(ruta_video):
     descripcion = (
         f"queue "
         f"name=q_evento_{id_grabacion} "
-        f"max-size-buffers=0 "
+        f"max-size-buffers=8 "
         f"max-size-bytes=0 "
-        f"max-size-time=0 ! "
+        f"max-size-time=0 "
+        f"leaky=no ! "
         f"h264parse config-interval=-1 ! "
         f"mp4mux "
         f"name=mux_evento_{id_grabacion} ! "
@@ -1321,6 +1322,7 @@ pipeline = Gst.parse_launch(
     # Rama 1: visualizacion
     "t. ! "
     "queue "
+    "name=q_preview "
     "leaky=downstream "
     "max-size-buffers=2 "
     "max-size-bytes=0 "
@@ -1332,6 +1334,7 @@ pipeline = Gst.parse_launch(
     # Rama 2: QR
     "t. ! "
     "queue "
+    "name=q_qr "
     "leaky=downstream "
     "max-size-buffers=2 "
     "max-size-bytes=0 "

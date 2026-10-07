@@ -596,6 +596,68 @@ pipeline {
             }
         }
 
+        stage('B1-B6 - Topologia y flujo Raspberry') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+
+                    rm -f resultados/B*.txt
+                    rm -f resultados/B*.log
+
+                    if [ ! -f resultados/A3_framerate_rpi.txt ]; then
+                        echo "FAIL: falta evidencia A3 para obtener FPS real."
+                        exit 1
+                    fi
+
+                    FPS="$(awk '/Framerate real:/ {print $3}'                         resultados/A3_framerate_rpi.txt                         | tail -n 1)"
+
+                    if [ -z "$FPS" ]; then
+                        echo "FAIL: no fue posible leer FPS real de A3."
+                        exit 1
+                    fi
+
+                    echo "FPS real para B3/B5: $FPS"
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando pruebas B1-B6 a Raspberry..."
+
+                    scp -o BatchMode=yes                         tests/rpi/test_b1_tee_queues.py                         tests/rpi/test_b2_queue_policy.py                         tests/rpi/test_b3_queue_latency.py                         tests/rpi/test_b4_appsink.py                         tests/rpi/test_b5_callback.py                         tests/rpi/test_b6_eos_systemd.sh                         tests/rpi/run_block_b_rpi.sh                         prueba_integrada_h1.py                         "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando bloque B completo..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" "
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        chmod +x                             /tmp/run_block_b_rpi.sh                             /tmp/test_b6_eos_systemd.sh
+
+                        cd /tmp
+
+                        ./run_block_b_rpi.sh '$FPS'
+                    "
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencias del bloque B..."
+
+                    scp -r -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/."                         resultados/                         || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('Ejecutar smoke tests') {
             steps {
                 sh '''
