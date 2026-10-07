@@ -365,6 +365,50 @@ pipeline {
         // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
+        stage('A4 - Capsfilters Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+                    rm -f resultados/A4_capsfilters_rpi.txt
+
+                    echo "Copiando A4 y aplicacion a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a4_capsfilters.py \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando A4 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        cd /tmp
+
+                        python3 /tmp/test_a4_capsfilters.py rpi NV12
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencia A4..."
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A4_capsfilters_rpi.txt" \
+                        resultados/A4_capsfilters_rpi.txt \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('A5 - Conversiones QEMU') {
             when {
                 expression {
@@ -390,6 +434,75 @@ pipeline {
         // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
+        stage('A5 - Conversiones Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+
+                    rm -f resultados/A5_pipeline_rpi.log
+                    rm -f resultados/A5_conversiones_rpi.txt
+                    rm -f resultados/A5_pipeline_rpi.dot
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando A5 y aplicacion a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a5_conversions.sh \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando A5 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        systemctl stop control-acceso
+
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        chmod +x /tmp/test_a5_conversions.sh
+
+                        cd /tmp
+
+                        ./test_a5_conversions.sh rpi
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencias A5..."
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A5_pipeline_rpi.log" \
+                        resultados/A5_pipeline_rpi.log \
+                        || true
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A5_conversiones_rpi.txt" \
+                        resultados/A5_conversiones_rpi.txt \
+                        || true
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A5_pipeline_rpi.dot" \
+                        resultados/A5_pipeline_rpi.dot \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('A6 - Grafo pipeline QEMU') {
             when {
                 expression {
@@ -413,6 +526,75 @@ pipeline {
         // ============================================================
         // SMOKE TESTS
         // ============================================================
+
+        stage('A6 - Grafo Raspberry real') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+
+                    rm -f resultados/A6_pipeline_rpi.log
+                    rm -f resultados/A6_revision_rpi.txt
+                    rm -f resultados/A6_pipeline_rpi.dot
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando A6 y aplicacion a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_a6_pipeline_graph.sh \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando A6 sobre Raspberry Pi real..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        systemctl stop control-acceso
+
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        chmod +x /tmp/test_a6_pipeline_graph.sh
+
+                        cd /tmp
+
+                        ./test_a6_pipeline_graph.sh rpi
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencias A6..."
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A6_pipeline_rpi.log" \
+                        resultados/A6_pipeline_rpi.log \
+                        || true
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A6_revision_rpi.txt" \
+                        resultados/A6_revision_rpi.txt \
+                        || true
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/A6_pipeline_rpi.dot" \
+                        resultados/A6_pipeline_rpi.dot \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
 
         stage('Ejecutar smoke tests') {
             steps {
