@@ -19,6 +19,14 @@ RDEPENDS:${PN} = " \
     gstreamer1.0 \
     gstreamer1.0-python \
     libcamera-gst \
+    gstreamer1.0-plugins-base-app \
+    gstreamer1.0-plugins-base-videoconvertscale \
+    gstreamer1.0-plugins-base-videotestsrc \
+    gstreamer1.0-plugins-good-autodetect \
+    gstreamer1.0-plugins-good-rtp \
+    gstreamer1.0-plugins-good-udp \
+    gstreamer1.0-plugins-good-isomp4 \
+    gstreamer1.0-plugins-bad-videoparsersbad \
     gstreamer1.0-plugins-ugly-x264 \
 "
 

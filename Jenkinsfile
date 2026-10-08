@@ -693,6 +693,176 @@ pipeline {
         }
 
 
+
+        // ============================================================
+        // D3 - INTERVALO DE KEYFRAMES
+        // ============================================================
+
+        stage('D3 - Keyframes Raspberry') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+                    rm -f resultados/D3_keyframes_rpi.txt
+
+                    if [ ! -f resultados/A3_framerate_rpi.txt ]; then
+                        echo "FAIL: falta evidencia A3 para obtener FPS real."
+                        exit 1
+                    fi
+
+                    FPS="$(
+                        awk '/Framerate real:/ {print $3}' \
+                            resultados/A3_framerate_rpi.txt \
+                        | tail -n 1
+                    )"
+
+                    if [ -z "$FPS" ]; then
+                        echo "FAIL: no fue posible leer FPS real de A3."
+                        exit 1
+                    fi
+
+                    echo "FPS real para D3: $FPS"
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando D3 a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_d3_keyframes.py \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando D3..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" "
+                        systemctl stop control-acceso
+
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        cd /tmp
+
+                        python3 test_d3_keyframes.py \
+                            prueba_integrada_h1.py \
+                            '$FPS'
+                    "
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencia D3..."
+
+                    scp -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/D3_keyframes_rpi.txt" \
+                        resultados/D3_keyframes_rpi.txt \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
+
+        // ============================================================
+        // E1 / E3 / E6 - MANEJO DE ERRORES Y RECUPERACION
+        // G3 / G5 - REPRODUCIBILIDAD YOCTO
+        // ============================================================
+
+        stage('E1 E3 E6 G3 G5 - Validacion Raspberry') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+
+                    rm -f resultados/E1_*.txt
+                    rm -f resultados/E3_*.txt
+                    rm -f resultados/E6_*.txt
+                    rm -f resultados/G3_*.txt
+                    rm -f resultados/G5_*.txt
+
+                    echo "Copiando pruebas E/G a Raspberry..."
+
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_e1_bus_watch.py \
+                        tests/rpi/test_e3_recovery_policy.sh \
+                        tests/rpi/test_e6_systemd_restart.sh \
+                        tests/rpi/test_g3_registry.sh \
+                        tests/rpi/test_g5_versions.sh \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando pruebas E/G..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" '
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        chmod +x \
+                            /tmp/test_e3_recovery_policy.sh \
+                            /tmp/test_e6_systemd_restart.sh \
+                            /tmp/test_g3_registry.sh \
+                            /tmp/test_g5_versions.sh
+
+                        cd /tmp
+
+                        echo
+                        echo "===== E1 ====="
+                        python3 \
+                            test_e1_bus_watch.py \
+                            prueba_integrada_h1.py \
+                            || exit 1
+
+                        echo
+                        echo "===== E3 ====="
+                        ./test_e3_recovery_policy.sh \
+                            || exit 1
+
+                        echo
+                        echo "===== E6 ====="
+                        ./test_e6_systemd_restart.sh \
+                            || exit 1
+
+                        echo
+                        echo "===== G3 ====="
+                        ./test_g3_registry.sh \
+                            || exit 1
+
+                        echo
+                        echo "===== G5 ====="
+                        ./test_g5_versions.sh \
+                            || exit 1
+                    '
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencias E/G..."
+
+                    scp -r -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/." \
+                        resultados/ \
+                        || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
+
         // ============================================================
         // BLOQUE C - HARDWARE VS SOFTWARE
         // ============================================================
