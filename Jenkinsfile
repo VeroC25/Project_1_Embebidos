@@ -59,6 +59,36 @@ pipeline {
         }
 
 
+        stage('H1 - Arquitectura de hilos') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        python3 tests/host/test_h1_thread_architecture.py \
+                            prueba_integrada_h1.py
+                '''
+            }
+        }
+
+
+        stage('H2 - Timeout fail-secure') {
+            steps {
+                sh '''
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        --mount type=bind,src="$WORKSPACE",dst=/proyecto \
+                        -w /proyecto \
+                        control-acceso-dev:ci \
+                        python3 tests/host/test_h2_timeout_failsecure.py \
+                            prueba_integrada_h1.py
+                '''
+            }
+        }
+
+
         stage('H7 - Retencion') {
             steps {
                 sh '''
