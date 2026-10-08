@@ -774,11 +774,11 @@ pipeline {
 
 
         // ============================================================
-        // E1 / E3 / E6 - MANEJO DE ERRORES Y RECUPERACION
+        // E1 / E3 / E4 / E5 / E6 - MANEJO DE ERRORES Y RECUPERACION
         // G3 / G5 - REPRODUCIBILIDAD YOCTO
         // ============================================================
 
-        stage('E1 E3 E6 G3 G5 - Validacion Raspberry') {
+        stage('E1 E3 E4 E5 E6 G3 G5 - Validacion Raspberry') {
             steps {
                 sh '''
                     set -eu
@@ -787,6 +787,9 @@ pipeline {
 
                     rm -f resultados/E1_*.txt
                     rm -f resultados/E3_*.txt
+                    rm -f resultados/E4_*.txt
+                    rm -f resultados/E4_*.log
+                    rm -f resultados/E5_*.txt
                     rm -f resultados/E6_*.txt
                     rm -f resultados/G3_*.txt
                     rm -f resultados/G5_*.txt
@@ -796,6 +799,8 @@ pipeline {
                     scp -o BatchMode=yes \
                         tests/rpi/test_e1_bus_watch.py \
                         tests/rpi/test_e3_recovery_policy.sh \
+                        tests/rpi/test_e4_mp4_stop.sh \
+                        tests/rpi/test_e5_disk_full.sh \
                         tests/rpi/test_e6_systemd_restart.sh \
                         tests/rpi/test_g3_registry.sh \
                         tests/rpi/test_g5_versions.sh \
@@ -812,6 +817,8 @@ pipeline {
 
                         chmod +x \
                             /tmp/test_e3_recovery_policy.sh \
+                            /tmp/test_e4_mp4_stop.sh \
+                            /tmp/test_e5_disk_full.sh \
                             /tmp/test_e6_systemd_restart.sh \
                             /tmp/test_g3_registry.sh \
                             /tmp/test_g5_versions.sh
@@ -828,6 +835,16 @@ pipeline {
                         echo
                         echo "===== E3 ====="
                         ./test_e3_recovery_policy.sh \
+                            || exit 1
+
+                        echo
+                        echo "===== E4 ====="
+                        ./test_e4_mp4_stop.sh \
+                            || exit 1
+
+                        echo
+                        echo "===== E5 ====="
+                        ./test_e5_disk_full.sh \
                             || exit 1
 
                         echo
