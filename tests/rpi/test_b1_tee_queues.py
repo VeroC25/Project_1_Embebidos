@@ -130,7 +130,7 @@ bloque_grabacion = codigo[
 ]
 
 indice_evento = bloque_grabacion.find(
-    'f"name=q_evento_{id_grabacion} "'
+    'f"name=q_evento_"'
 )
 
 antes_evento = (
