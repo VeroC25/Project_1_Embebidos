@@ -89,7 +89,6 @@ pipeline {
 
         // ============================================================
         // A1 - QEMU
-        // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
         stage('A1 - Caps negociados QEMU') {
@@ -174,7 +173,6 @@ pipeline {
 
         // ============================================================
         // A2 - QEMU
-        // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
         stage('A2 - Formato de pixel QEMU') {
@@ -259,7 +257,6 @@ pipeline {
 
         // ============================================================
         // A3 - QEMU
-        // DESACTIVADO TEMPORALMENTE
         // ============================================================
 
         stage('A3 - Framerate QEMU') {
@@ -283,8 +280,7 @@ pipeline {
 
 
         // ============================================================
-        // A4 - QEMU
-        // DESACTIVADO TEMPORALMENTE
+        // A3 - RASPBERRY PI REAL
         // ============================================================
 
         stage('A3 - Framerate Raspberry real') {
@@ -340,6 +336,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // A4 - QEMU
+        // ============================================================
+
         stage('A4 - Capsfilters QEMU') {
             when {
                 expression {
@@ -361,8 +362,7 @@ pipeline {
 
 
         // ============================================================
-        // A5 - QEMU
-        // DESACTIVADO TEMPORALMENTE
+        // A4 - RASPBERRY PI REAL
         // ============================================================
 
         stage('A4 - Capsfilters Raspberry real') {
@@ -409,6 +409,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // A5 - QEMU
+        // ============================================================
+
         stage('A5 - Conversiones QEMU') {
             when {
                 expression {
@@ -430,8 +435,7 @@ pipeline {
 
 
         // ============================================================
-        // A6 - QEMU
-        // DESACTIVADO TEMPORALMENTE
+        // A5 - RASPBERRY PI REAL
         // ============================================================
 
         stage('A5 - Conversiones Raspberry real') {
@@ -503,6 +507,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // A6 - QEMU
+        // ============================================================
+
         stage('A6 - Grafo pipeline QEMU') {
             when {
                 expression {
@@ -524,7 +533,7 @@ pipeline {
 
 
         // ============================================================
-        // SMOKE TESTS
+        // A6 - RASPBERRY PI REAL
         // ============================================================
 
         stage('A6 - Grafo Raspberry real') {
@@ -596,6 +605,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // BLOQUE B - TOPOLOGIA Y FLUJO
+        // ============================================================
+
         stage('B1-B6 - Topologia y flujo Raspberry') {
             steps {
                 sh '''
@@ -611,7 +625,11 @@ pipeline {
                         exit 1
                     fi
 
-                    FPS="$(awk '/Framerate real:/ {print $3}'                         resultados/A3_framerate_rpi.txt                         | tail -n 1)"
+                    FPS="$(
+                        awk '/Framerate real:/ {print $3}' \
+                            resultados/A3_framerate_rpi.txt \
+                        | tail -n 1
+                    )"
 
                     if [ -z "$FPS" ]; then
                         echo "FAIL: no fue posible leer FPS real de A3."
@@ -621,14 +639,25 @@ pipeline {
                     echo "FPS real para B3/B5: $FPS"
 
                     cleanup_rpi() {
-                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
                     }
 
                     trap cleanup_rpi EXIT
 
                     echo "Copiando pruebas B1-B6 a Raspberry..."
 
-                    scp -o BatchMode=yes                         tests/rpi/test_b1_tee_queues.py                         tests/rpi/test_b2_queue_policy.py                         tests/rpi/test_b3_queue_latency.py                         tests/rpi/test_b4_appsink.py                         tests/rpi/test_b5_callback.py                         tests/rpi/test_b6_eos_systemd.sh                         tests/rpi/run_block_b_rpi.sh                         prueba_integrada_h1.py                         "$RPI_HOST:/tmp/"
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_b1_tee_queues.py \
+                        tests/rpi/test_b2_queue_policy.py \
+                        tests/rpi/test_b3_queue_latency.py \
+                        tests/rpi/test_b4_appsink.py \
+                        tests/rpi/test_b5_callback.py \
+                        tests/rpi/test_b6_eos_systemd.sh \
+                        tests/rpi/run_block_b_rpi.sh \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
 
                     echo "Ejecutando bloque B completo..."
 
@@ -638,7 +667,9 @@ pipeline {
                         rm -rf /tmp/resultados
                         mkdir -p /tmp/resultados
 
-                        chmod +x                             /tmp/run_block_b_rpi.sh                             /tmp/test_b6_eos_systemd.sh
+                        chmod +x \
+                            /tmp/run_block_b_rpi.sh \
+                            /tmp/test_b6_eos_systemd.sh
 
                         cd /tmp
 
@@ -651,12 +682,20 @@ pipeline {
 
                     echo "Recuperando evidencias del bloque B..."
 
-                    scp -r -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/."                         resultados/                         || true
+                    scp -r -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/." \
+                        resultados/ \
+                        || true
 
                     exit "$TEST_STATUS"
                 '''
             }
         }
+
+
+        // ============================================================
+        // BLOQUE C - HARDWARE VS SOFTWARE
+        // ============================================================
 
         stage('C1-C4 - Hardware vs software Raspberry') {
             steps {
@@ -674,7 +713,11 @@ pipeline {
                         exit 1
                     fi
 
-                    FPS="$(awk '/Framerate real:/ {print $3}'                         resultados/A3_framerate_rpi.txt                         | tail -n 1)"
+                    FPS="$(
+                        awk '/Framerate real:/ {print $3}' \
+                            resultados/A3_framerate_rpi.txt \
+                        | tail -n 1
+                    )"
 
                     if [ -z "$FPS" ]; then
                         echo "FAIL: no fue posible leer FPS de A3."
@@ -684,24 +727,40 @@ pipeline {
                     echo "FPS real para bloque C: $FPS"
 
                     cleanup_rpi() {
-                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                        ssh -o BatchMode=yes "$RPI_HOST" \
+                            'systemctl start control-acceso' \
+                            >/dev/null 2>&1 || true
                     }
 
                     trap cleanup_rpi EXIT
 
                     echo "Copiando pruebas C1-C4 a Raspberry..."
 
-                    scp -o BatchMode=yes                         tests/rpi/test_c1_hardware_encoder.sh                         tests/rpi/test_c2_cpu_compare.py                         tests/rpi/test_c3_encoder_limits.py                         tests/rpi/test_c4_dmabuf.py                         tests/rpi/run_block_c_rpi.sh                         prueba_integrada_h1.py                         "$RPI_HOST:/tmp/"
+                    scp -o BatchMode=yes \
+                        tests/rpi/test_c1_hw_encoder.sh \
+                        tests/rpi/test_c2_cpu_compare.py \
+                        tests/rpi/test_c3_hw_operating_point.sh \
+                        tests/rpi/test_c4_dmabuf.sh \
+                        tests/rpi/run_block_c_rpi.sh \
+                        prueba_integrada_h1.py \
+                        "$RPI_HOST:/tmp/"
 
                     echo "Ejecutando bloque C completo..."
 
                     set +e
 
                     ssh -o BatchMode=yes "$RPI_HOST" "
+                        systemctl stop control-acceso \
+                            >/dev/null 2>&1 || true
+
                         rm -rf /tmp/resultados
                         mkdir -p /tmp/resultados
 
-                        chmod +x                             /tmp/test_c1_hardware_encoder.sh                             /tmp/run_block_c_rpi.sh
+                        chmod +x \
+                            /tmp/test_c1_hw_encoder.sh \
+                            /tmp/test_c3_hw_operating_point.sh \
+                            /tmp/test_c4_dmabuf.sh \
+                            /tmp/run_block_c_rpi.sh
 
                         cd /tmp
 
@@ -714,12 +773,20 @@ pipeline {
 
                     echo "Recuperando evidencias del bloque C..."
 
-                    scp -r -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/."                         resultados/                         || true
+                    scp -r -o BatchMode=yes \
+                        "$RPI_HOST:/tmp/resultados/." \
+                        resultados/ \
+                        || true
 
                     exit "$TEST_STATUS"
                 '''
             }
         }
+
+
+        // ============================================================
+        // SMOKE TESTS
+        // ============================================================
 
         stage('Ejecutar smoke tests') {
             steps {
