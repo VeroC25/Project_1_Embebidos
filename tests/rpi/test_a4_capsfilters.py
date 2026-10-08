@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import ast
 import os
 import sys
 
@@ -17,6 +17,15 @@ if MODO not in ("qemu", "rpi"):
 with open(APP, "r", encoding="utf-8") as archivo:
     codigo = archivo.read()
 
+arbol = ast.parse(codigo)
+
+literales = "\n".join(
+    nodo.value
+    for nodo in ast.walk(arbol)
+    if isinstance(nodo, ast.Constant)
+    and isinstance(nodo.value, str)
+)
+
 os.makedirs("resultados", exist_ok=True)
 
 ARCHIVO = f"resultados/A4_capsfilters_{MODO}.txt"
@@ -26,7 +35,7 @@ resultados = []
 
 def verificar(nombre, texto, justificacion):
 
-    encontrado = texto in codigo
+    encontrado = texto in codigo or texto in literales
 
     resultados.append(
         (
