@@ -63,6 +63,23 @@ DIAS_RETENCION_BITACORA = 30
 # no operativa y la aplicación termina con error.
 TIEMPO_MAX_SIN_FRAMES = 3.0
 
+# Inyeccion de fallo controlada para E2.
+# No desconecta fisicamente la camara ni modifica el driver.
+PRUEBA_SIN_FRAMES_SOLICITADA = (
+    os.getenv(
+        "CONTROL_ACCESO_TEST_NO_FRAMES",
+        "0"
+    )
+    == "1"
+)
+
+RETARDO_PRUEBA_SIN_FRAMES = float(
+    os.getenv(
+        "CONTROL_ACCESO_TEST_NO_FRAMES_DELAY",
+        "2.0"
+    )
+)
+
 
 # ============================================================
 # CONTROL DE APERTURA
@@ -1233,11 +1250,26 @@ def nuevo_frame(
 
         return Gst.FlowReturn.ERROR
 
-    # Se recibió un frame válido del pipeline.
-    # Esta marca alimenta el watchdog.
-    ultimo_frame_monotonic = (
-        time.monotonic()
+    # Se recibio un frame valido del pipeline.
+    ahora_frame = time.monotonic()
+
+    # E2: permite simular de forma segura que la fuente dejo
+    # de entregar frames, sin hacer unbind ni tocar el driver.
+    simular_sin_frames = (
+        PRUEBA_SIN_FRAMES_SOLICITADA
+        and inicio_pipeline_monotonic
+        is not None
+        and (
+            ahora_frame
+            - inicio_pipeline_monotonic
+        )
+        >= RETARDO_PRUEBA_SIN_FRAMES
     )
+
+    if not simular_sin_frames:
+        ultimo_frame_monotonic = (
+            ahora_frame
+        )
 
     buffer = (
         sample.get_buffer()

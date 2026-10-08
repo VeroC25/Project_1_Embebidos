@@ -774,11 +774,11 @@ pipeline {
 
 
         // ============================================================
-        // E1 / E3 / E4 / E5 / E6 - MANEJO DE ERRORES Y RECUPERACION
+        // E1 / E2 / E3 / E4 / E5 / E6 - MANEJO DE ERRORES Y RECUPERACION
         // G3 / G5 - REPRODUCIBILIDAD YOCTO
         // ============================================================
 
-        stage('E1 E3 E4 E5 E6 G3 G5 - Validacion Raspberry') {
+        stage('E1 E2 E3 E4 E5 E6 G3 G5 - Validacion Raspberry') {
             steps {
                 sh '''
                     set -eu
@@ -786,6 +786,8 @@ pipeline {
                     mkdir -p resultados
 
                     rm -f resultados/E1_*.txt
+                    rm -f resultados/E2_*.txt
+                    rm -f resultados/E2_*.log
                     rm -f resultados/E3_*.txt
                     rm -f resultados/E4_*.txt
                     rm -f resultados/E4_*.log
@@ -798,6 +800,7 @@ pipeline {
 
                     scp -o BatchMode=yes \
                         tests/rpi/test_e1_bus_watch.py \
+                        tests/rpi/test_e2_camera_watchdog.sh \
                         tests/rpi/test_e3_recovery_policy.sh \
                         tests/rpi/test_e4_mp4_stop.sh \
                         tests/rpi/test_e5_disk_full.sh \
@@ -816,6 +819,7 @@ pipeline {
                         mkdir -p /tmp/resultados
 
                         chmod +x \
+                            /tmp/test_e2_camera_watchdog.sh \
                             /tmp/test_e3_recovery_policy.sh \
                             /tmp/test_e4_mp4_stop.sh \
                             /tmp/test_e5_disk_full.sh \
@@ -830,6 +834,12 @@ pipeline {
                         python3 \
                             test_e1_bus_watch.py \
                             prueba_integrada_h1.py \
+                            || exit 1
+
+                        echo
+                        echo "===== E2 ====="
+                        ./test_e2_camera_watchdog.sh \
+                            /tmp/prueba_integrada_h1.py \
                             || exit 1
 
                         echo
