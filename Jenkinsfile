@@ -658,6 +658,69 @@ pipeline {
             }
         }
 
+        stage('C1-C4 - Hardware vs software Raspberry') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p resultados
+
+                    rm -f resultados/C*.txt
+                    rm -f resultados/C*.log
+                    rm -f resultados/C*.env
+
+                    if [ ! -f resultados/A3_framerate_rpi.txt ]; then
+                        echo "FAIL: falta A3 para obtener FPS real."
+                        exit 1
+                    fi
+
+                    FPS="$(awk '/Framerate real:/ {print $3}'                         resultados/A3_framerate_rpi.txt                         | tail -n 1)"
+
+                    if [ -z "$FPS" ]; then
+                        echo "FAIL: no fue posible leer FPS de A3."
+                        exit 1
+                    fi
+
+                    echo "FPS real para bloque C: $FPS"
+
+                    cleanup_rpi() {
+                        ssh -o BatchMode=yes "$RPI_HOST"                             'systemctl start control-acceso'                             >/dev/null 2>&1 || true
+                    }
+
+                    trap cleanup_rpi EXIT
+
+                    echo "Copiando pruebas C1-C4 a Raspberry..."
+
+                    scp -o BatchMode=yes                         tests/rpi/test_c1_hardware_encoder.sh                         tests/rpi/test_c2_cpu_compare.py                         tests/rpi/test_c3_encoder_limits.py                         tests/rpi/test_c4_dmabuf.py                         tests/rpi/run_block_c_rpi.sh                         prueba_integrada_h1.py                         "$RPI_HOST:/tmp/"
+
+                    echo "Ejecutando bloque C completo..."
+
+                    set +e
+
+                    ssh -o BatchMode=yes "$RPI_HOST" "
+                        rm -rf /tmp/resultados
+                        mkdir -p /tmp/resultados
+
+                        chmod +x                             /tmp/test_c1_hardware_encoder.sh                             /tmp/run_block_c_rpi.sh
+
+                        cd /tmp
+
+                        ./run_block_c_rpi.sh '$FPS'
+                    "
+
+                    TEST_STATUS=$?
+
+                    set -e
+
+                    echo "Recuperando evidencias del bloque C..."
+
+                    scp -r -o BatchMode=yes                         "$RPI_HOST:/tmp/resultados/."                         resultados/                         || true
+
+                    exit "$TEST_STATUS"
+                '''
+            }
+        }
+
         stage('Ejecutar smoke tests') {
             steps {
                 sh '''
