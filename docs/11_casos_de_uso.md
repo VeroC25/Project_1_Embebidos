@@ -2,227 +2,460 @@
 
 ## 1. Propósito
 
-Este documento formaliza los casos de uso definidos para el sistema de control de acceso. La identificación se realiza exclusivamente mediante un **código QR presentado frente a la misma cámara utilizada para supervisión**; no se utiliza un lector externo.
+Este documento describe los casos de uso principales del sistema de control de acceso.
+
+La identificación se realiza mediante un **código QR presentado frente a la misma cámara utilizada para supervisión**. El sistema procesa el identificador, determina si el acceso está autorizado, registra el evento, genera evidencia y mantiene la transmisión de video hacia la estación del vigilante.
 
 ---
 
-## 2. Actores y partes interesadas
+## 2. Actores
 
-| Actor / interesado | Descripción | Interacción principal |
+| Actor | Descripción |
+|---|---|
+| Persona que solicita acceso | Presenta un código QR frente a la cámara para solicitar ingreso |
+| Vigilante / operador | Supervisa el punto de acceso mediante el video recibido en la estación de vigilancia |
+| Personal de mantenimiento | Configura, verifica y administra el sistema embebido |
+
+---
+
+## 3. Casos de uso principales
+
+| ID | Caso de uso | Actor principal |
 |---|---|---|
-| Persona que solicita acceso | Persona que se presenta en el punto de entrada | Presenta un código QR y recibe el resultado de su solicitud |
-| Vigilante / operador | Persona ubicada en el puesto de vigilancia | Observa el video transmitido desde el punto de acceso |
-| Equipo de desarrollo / mantenimiento | Responsable de configurar, instalar y verificar el sistema | Construye la imagen, despliega la aplicación y realiza pruebas/mantenimiento |
+| CU-01 | Solicitar acceso | Persona que solicita acceso |
+| CU-02 | Validar identificación | Persona que solicita acceso |
+| CU-03 | Supervisar punto de acceso | Vigilante / operador |
+| CU-04 | Registrar evento y evidencia | Sistema |
+| CU-05 | Controlar apertura | Sistema |
+| CU-06 | Administrar el sistema | Personal de mantenimiento |
 
 ---
 
-## 3. Resumen de casos de uso
-
-| ID | Caso de uso | Actor principal | Descripción |
-|---|---|---|---|
-| CU-01 | Solicitar acceso | Persona que solicita acceso | La persona se presenta, muestra el QR y el sistema gestiona la solicitud |
-| CU-02 | Validar identificación | Persona que solicita acceso | El sistema detecta y decodifica el QR, obtiene el identificador y clasifica la solicitud |
-| CU-03 | Supervisar punto de acceso | Vigilante / operador | El vigilante observa el video en vivo procedente del punto de acceso |
-| CU-04 | Registrar evidencia | Sistema / caso incluido | El sistema genera y conserva evidencia de video asociada con la solicitud |
-
----
-
-## 4. Diagrama de casos de uso
-
-El siguiente diagrama representa funcionalmente las relaciones definidas para el proyecto.
+## 4. Diagrama general
 
 ```mermaid
 flowchart LR
     PERSONA["Persona que solicita acceso"]
     VIG["Vigilante / operador"]
+    MANT["Personal de mantenimiento"]
 
-    subgraph SISTEMA["Sistema de control de acceso"]
+    subgraph SYS["Sistema de control de acceso"]
         CU1(["CU-01<br/>Solicitar acceso"])
         CU2(["CU-02<br/>Validar identificación"])
         CU3(["CU-03<br/>Supervisar punto de acceso"])
-        CU4(["CU-04<br/>Registrar evidencia"])
+        CU4(["CU-04<br/>Registrar evento y evidencia"])
+        CU5(["CU-05<br/>Controlar apertura"])
+        CU6(["CU-06<br/>Administrar el sistema"])
     end
 
     PERSONA --> CU1
     CU1 --> CU2
     CU1 --> CU4
+    CU2 --> CU5
+
     VIG --> CU3
+    MANT --> CU6
 ```
 
 ---
 
-## 5. Flujo principal de identificación
-
-El flujo definido para CU-01/CU-02 es:
-
-1. La persona se presenta en el punto de acceso.
-2. La persona muestra un código QR frente a la cámara.
-3. El sistema detecta el código QR en el flujo de video.
-4. El sistema decodifica el QR y obtiene el identificador.
-5. El sistema valida el identificador frente a las credenciales autorizadas.
-6. El sistema clasifica la solicitud como autorizada o denegada.
-7. Si la solicitud es autorizada, el sistema activa la salida eléctrica de apertura; si es denegada, mantiene la salida inactiva.
-8. El sistema conserva evidencia del evento y mantiene la supervisión por video.
-
----
-
-# 6. Especificación individual
-
-## CU-01 — Solicitar acceso
+# 5. CU-01 — Solicitar acceso
 
 **Actor principal:** Persona que solicita acceso.
 
-**Objetivo:** iniciar y completar una solicitud de acceso mediante un código QR.
+**Objetivo:** solicitar ingreso mediante un código QR.
 
-**Precondiciones:**
+### Precondiciones
 
-- sistema en operación;
-- cámara disponible;
-- aplicación de control de acceso en ejecución.
+- el sistema está en ejecución;
+- la cámara se encuentra disponible;
+- el pipeline de video se encuentra activo.
 
-**Disparador:** la persona presenta un QR frente a la cámara.
+### Disparador
 
-**Flujo principal:**
+La persona presenta un código QR frente a la cámara.
 
-1. La cámara captura el QR.
-2. El sistema obtiene el identificador.
-3. Se ejecuta CU-02.
-4. El sistema registra el evento.
-5. Se genera evidencia mediante CU-04.
-6. El sistema continúa supervisando el punto de acceso.
+### Flujo principal
 
-**Flujos alternos:**
+1. La cámara captura el código QR.
+2. El sistema detecta y decodifica el identificador.
+3. Se ejecuta la validación de identificación.
+4. El sistema determina el resultado de la solicitud.
+5. Se registra el evento.
+6. Se genera una evidencia de video.
+7. Si el resultado es autorizado, se activa la lógica de apertura.
+8. El sistema continúa supervisando el punto de acceso.
 
-- si el identificador no está autorizado, la solicitud se clasifica como denegada;
-- si vence el tiempo máximo de decisión, la política definida clasifica la solicitud como denegada;
-- si no se consigue decodificar el QR, no existe todavía un identificador sobre el cual ejecutar la clasificación.
+### Flujos alternos
 
-**Postcondiciones:**
+- Si el QR no puede decodificarse, no se genera una decisión de acceso.
+- Si el identificador no está autorizado, el resultado es `DENEGADO`.
+- Si la validación excede el tiempo máximo permitido, el resultado es `DENEGADO_TIMEOUT`.
 
-- solicitud clasificada cuando existe un identificador decodificado;
-- evento registrado;
-- evidencia asociada al evento.
+### Postcondiciones
 
-**Requisitos asociados:** RF-02, RF-03, RF-04, RF-05, RF-06.
+Cuando existe un identificador válido:
+
+- la solicitud queda clasificada;
+- el evento queda registrado;
+- se crea una evidencia asociada.
 
 ---
 
-## CU-02 — Validar identificación
+# 6. CU-02 — Validar identificación
 
 **Actor principal:** Persona que solicita acceso.
 
 **Objetivo:** determinar si el identificador obtenido mediante QR está autorizado.
 
-**Precondición:** existe un identificador decodificado.
+### Precondición
 
-**Flujo principal:**
+Existe un identificador QR correctamente decodificado.
+
+### Flujo principal
 
 1. El sistema recibe el identificador.
-2. El sistema lo compara contra las credenciales autorizadas.
-3. El resultado se clasifica como autorizado o denegado.
-4. El resultado se entrega a la lógica de salida y registro.
+2. Se consulta el conjunto de identificadores autorizados.
+3. Se determina el resultado.
+4. El resultado se entrega a la lógica de registro y control de apertura.
 
-**Comportamiento actual de prueba:**
+Los identificadores configurados como autorizados son:
 
 ```text
-MC001 -> AUTORIZADO
-otro identificador decodificado -> DENEGADO
+MC001
+MC002
 ```
 
-**Flujo alterno por timeout:** si la decisión excede el tiempo máximo configurado, el resultado es denegado por timeout.
+El comportamiento es:
 
-**Requisitos asociados:** RF-02, RF-03, RF-04, RF-05.
+```text
+MC001 → AUTORIZADO
+MC002 → AUTORIZADO
+otro identificador → DENEGADO
+```
+
+### Timeout
+
+La decisión dispone de un tiempo máximo de:
+
+```text
+10 s
+```
+
+Si ese intervalo se supera:
+
+```text
+DENEGADO_TIMEOUT
+```
+
+La política es **fail-secure**: un timeout nunca concede acceso.
 
 ---
 
-## CU-03 — Supervisar punto de acceso
+# 7. CU-03 — Supervisar punto de acceso
 
 **Actor principal:** Vigilante / operador.
 
-**Objetivo:** observar en vivo el video del punto de acceso.
+**Objetivo:** observar el video proveniente del punto de acceso.
 
-**Precondiciones:**
+### Precondiciones
 
+- Raspberry Pi en operación;
 - cámara disponible;
-- red entre Raspberry Pi y estación del vigilante;
-- receptor Docker en ejecución.
+- conectividad de red;
+- estación de vigilancia ejecutándose en Docker.
 
-**Flujo principal:**
+### Flujo principal
 
-1. La Raspberry captura video.
-2. El pipeline codifica H.264.
-3. El flujo se empaqueta como RTP.
-4. Se transmite mediante UDP al puerto 5000.
-5. La estación del vigilante recibe y decodifica el flujo.
-6. El navegador presenta el video mediante la interfaz web.
+1. La Raspberry Pi captura el video.
+2. GStreamer codifica el flujo en H.264.
+3. El flujo se encapsula mediante RTP.
+4. Se transmite mediante UDP.
+5. La estación de vigilancia recibe y decodifica el video.
+6. El navegador presenta el flujo al operador.
 
-**Requisitos asociados:** RF-01, RF-08.
+El contrato utilizado es:
+
+```text
+Codec:       H.264
+Transporte:  RTP/UDP
+Puerto:      5000
+Payload:     96
+Clock rate:  90000 Hz
+```
+
+La interfaz se consulta en:
+
+```text
+http://localhost:8081
+```
 
 ---
 
-## CU-04 — Registrar evidencia
+# 8. CU-04 — Registrar evento y evidencia
 
-**Actor principal:** Sistema / caso incluido.
+**Actor principal:** Sistema.
 
-**Objetivo:** conservar evidencia de video asociada con una solicitud de acceso.
+**Objetivo:** conservar información asociada con cada solicitud de acceso.
 
-**Precondición:** se genera un evento de acceso.
+### Precondición
 
-**Flujo principal implementado:**
+Se ha detectado y procesado un identificador QR.
 
-1. Se genera un nombre de archivo único con fecha y hora.
-2. Se crea una rama de grabación asociada al evento.
-3. La grabación se mantiene durante 60 s.
-4. El MP4 se guarda en almacenamiento persistente.
-5. La bitácora registra la ruta relativa de la evidencia.
+### Flujo principal
 
-**Ubicación:**
+1. Se genera una marca temporal.
+2. Se crea un archivo de evidencia único.
+3. Se inicia una rama de grabación desde el flujo H.264.
+4. Se registra el resultado del acceso.
+5. La grabación se mantiene durante 60 segundos.
+6. El archivo MP4 se finaliza mediante EOS.
+7. El archivo permanece almacenado en el sistema.
+
+Ubicación de evidencias:
 
 ```text
 /var/lib/control-acceso/evidencias/
 ```
 
-**Política de retención configurada:**
+Bitácora:
 
-- video: 7 días;
-- bitácora: 30 días.
+```text
+/var/lib/control-acceso/bitacora_accesos.log
+```
 
-**Requisitos asociados:** RF-06, RF-07, RQ-01.
+Formato de nombre:
+
+```text
+evidencia_YYYY-MM-DD_HH-MM-SS_microsegundos.mp4
+```
+
+### Retención
+
+```text
+Evidencias: 7 días
+Bitácora:   30 días
+```
 
 ---
 
-## 7. Secuencia operacional
+# 9. CU-05 — Controlar apertura
+
+**Actor principal:** Sistema.
+
+**Objetivo:** activar temporalmente la salida de apertura cuando una solicitud es autorizada.
+
+### Precondición
+
+La validación produjo:
+
+```text
+AUTORIZADO
+```
+
+### Flujo principal
+
+1. La aplicación activa la salida asociada con BCM17.
+2. La salida permanece activa durante 2 segundos.
+3. Un temporizador devuelve la salida al estado inactivo.
+
+Secuencia:
+
+```text
+LOW
+→ HIGH
+→ 2 s
+→ LOW
+```
+
+### Condiciones de seguridad
+
+La salida permanece inactiva ante:
+
+- acceso denegado;
+- timeout;
+- error fatal;
+- pérdida de frames;
+- cierre de la aplicación.
+
+La política aplicada es:
+
+```text
+sin autorización confirmada
+→ no abrir
+```
+
+---
+
+# 10. CU-06 — Administrar el sistema
+
+**Actor principal:** Personal de mantenimiento.
+
+**Objetivo:** verificar y administrar la operación del sistema embebido.
+
+### Funciones principales
+
+El personal puede:
+
+- consultar el estado del servicio;
+- revisar logs;
+- reiniciar el servicio;
+- consultar evidencias;
+- revisar la bitácora;
+- verificar plugins y dispositivos;
+- modificar parámetros de ejecución.
+
+Comandos principales:
+
+```bash
+systemctl status control-acceso
+systemctl restart control-acceso
+journalctl -fu control-acceso
+```
+
+Configuración:
+
+```text
+/etc/default/control-acceso
+```
+
+Datos persistentes:
+
+```text
+/var/lib/control-acceso
+```
+
+---
+
+# 11. Relación entre casos de uso
+
+El flujo funcional principal puede resumirse como:
+
+```mermaid
+flowchart TD
+    A["CU-01<br/>Solicitar acceso"] --> B["CU-02<br/>Validar identificación"]
+
+    B --> C{"Resultado"}
+
+    C -->|"Autorizado"| D["CU-05<br/>Controlar apertura"]
+    C -->|"Denegado"| E["Mantener salida inactiva"]
+    C -->|"Timeout"| E
+
+    A --> F["CU-04<br/>Registrar evento y evidencia"]
+
+    G["CU-03<br/>Supervisar punto de acceso"] --> H["Video continuo"]
+
+    I["CU-06<br/>Administrar sistema"] --> J["Servicio, logs y configuración"]
+```
+
+La supervisión de video es continua y no depende de que exista una solicitud de acceso.
+
+---
+
+# 12. Secuencia de una solicitud
 
 ```mermaid
 sequenceDiagram
     actor P as Persona
     participant C as Cámara
-    participant S as Sistema
+    participant G as GStreamer
+    participant Q as OpenCV
     participant V as Validación
     participant E as Evidencia
+    participant O as GPIO
+    participant L as Bitácora
     participant W as Vigilante
 
-    C-->>W: Video en vivo continuo
+    C-->>W: Video continuo
+
     P->>C: Presenta QR
-    C->>S: Frames
-    S->>V: Identificador decodificado
-    V-->>S: Autorizado / Denegado
-    S->>E: Crear evidencia de 60 s
-    S->>E: Registrar fecha, ID, resultado y ruta
-    alt autorizado
-        S-->>P: Resultado autorizado
-    else denegado
-        S-->>P: Resultado denegado
+    C->>G: Frame
+    G->>Q: Frame BGR
+    Q->>V: Identificador
+
+    alt Autorizado
+        V-->>Q: AUTORIZADO
+        Q->>O: Activar 2 s
+    else Denegado
+        V-->>Q: DENEGADO
+    else Timeout
+        V-->>Q: DENEGADO_TIMEOUT
     end
+
+    Q->>E: Crear evidencia
+    Q->>L: Registrar evento
 ```
 
-## 8. Estado de implementación
+---
 
-| Caso de uso | Estado |
-|---|---|
-| CU-01 Solicitar acceso | Implementado; rearme QR en validación final |
-| CU-02 Validar identificación | Validado en Raspberry con autorizados y denegados |
-| CU-03 Supervisar punto de acceso | Validado Raspberry → Docker → navegador |
-| CU-04 Registrar evidencia | Validado con evidencia de 60 s y grabaciones concurrentes |
+# 13. Casos alternos
 
-La salida eléctrica prevista en CU-01/CU-02 todavía requiere cerrar el circuito GPIO.
+## QR no decodificado
+
+Si la cámara detecta una escena pero OpenCV no obtiene un identificador válido:
+
+```text
+no existe solicitud clasificable
+```
+
+No se concede acceso.
+
+---
+
+## Identificador no autorizado
+
+```text
+QR válido
+→ identificador no autorizado
+→ DENEGADO
+→ salida LOW
+→ registro
+→ evidencia
+```
+
+---
+
+## Timeout de validación
+
+```text
+identificador
+→ validación > 10 s
+→ DENEGADO_TIMEOUT
+→ salida LOW
+```
+
+---
+
+## Pérdida de cámara
+
+Si el sistema permanece:
+
+```text
+3 s
+```
+
+sin frames:
+
+```text
+watchdog
+→ salida segura
+→ terminación con error
+→ recuperación mediante systemd
+```
+
+---
+
+# 14. Resumen
+
+Los casos de uso describen seis funciones principales del sistema:
+
+```text
+solicitar acceso
+validar identificación
+supervisar el punto de acceso
+registrar evidencia
+controlar la apertura
+administrar el sistema
+```
+
+La arquitectura mantiene separadas la supervisión, la decisión de acceso y la administración, mientras que cada solicitud válida queda asociada con un resultado y una evidencia persistente.
