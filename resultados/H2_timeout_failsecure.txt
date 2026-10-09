@@ -1,0 +1,17 @@
+H2 - TIMEOUT FAIL-SECURE
+
+Timeout configurado en produccion: 10.0 s
+Timeout usado para la prueba: 0.20 s
+Retardo simulado del clasificador: 0.60 s
+Tiempo real hasta la decision: 0.201 s
+
+[PASS] Timeout de produccion definido
+[PASS] La funcion usa future.result(timeout=...)
+[PASS] Clasificador lento produce timeout
+[PASS] Timeout niega el acceso
+[PASS] La decision retorna antes que el clasificador
+
+Autorizado: False
+Timeout: True
+
+PASS: ante un clasificador que excede el tiempo maximo, el sistema niega el acceso.

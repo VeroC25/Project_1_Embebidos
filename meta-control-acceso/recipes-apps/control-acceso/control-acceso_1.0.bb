@@ -56,7 +56,7 @@ do_install() {
     echo "CONTROL_ACCESO_GUI=0" \
         >> ${D}${sysconfdir}/default/control-acceso
 
-    echo "DEST_HOST=127.0.0.1" \
+    echo "DEST_HOST=10.42.0.1" \
         >> ${D}${sysconfdir}/default/control-acceso
 
     echo "DEST_PORT=5000" \
