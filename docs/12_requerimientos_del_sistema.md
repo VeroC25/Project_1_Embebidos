@@ -1,203 +1,710 @@
 # Requerimientos del sistema
 
-## 1. Criterio de redacción
+## 1. Propósito
 
-Los requerimientos de este proyecto se mantienen con la forma **“el sistema deberá…”** y se revisan según los criterios trabajados en el curso:
+Este documento define los requerimientos del sistema de control de acceso desarrollado para Raspberry Pi 4.
 
-- necesario;
-- apropiado;
-- inequívoco;
-- completo;
-- singular;
-- factible;
-- verificable;
-- correcto;
-- conforme.
+Los requerimientos describen **qué debe hacer el sistema** y las condiciones que debe cumplir. Los resultados de las pruebas se documentan por separado en:
 
-El conjunto debe mantenerse consistente, comprensible, factible y validable.
+```text
+06_validacion.md
+```
 
-> Los textos de los requerimientos que siguen conservan la especificación definida durante la etapa de diseño. Los resultados de implementación y pruebas se documentan aparte para no modificar silenciosamente la línea base.
+La redacción utiliza la forma:
+
+```text
+El sistema deberá...
+```
+
+para mantener los requerimientos claros, verificables y trazables.
 
 ---
 
 # 2. Requerimientos funcionales
 
-| ID | Requerimiento | Verificación | Origen | Estado de implementación |
-|---|---|---|---|---|
-| RF-01 | Durante el modo de operación normal, el sistema deberá capturar el flujo de video proveniente de la cámara ubicada en el punto de acceso. | Demostración | CU-01 / CU-03 | Validado en Raspberry |
-| RF-02 | Ante una solicitud de acceso, el sistema deberá obtener mediante la cámara el identificador contenido en el código QR presentado por el usuario. | Prueba | CU-01 / CU-02 | Validado en Raspberry |
-| RF-03 | Ante la obtención de un identificador, el sistema deberá clasificar la solicitud de acceso como autorizada o denegada. | Prueba | CU-02 | Validado en Raspberry |
-| RF-04 | Cuando una solicitud de acceso sea clasificada como autorizada, el sistema deberá activar la salida eléctrica asociada con la apertura del acceso. | Prueba | CU-02 | **Pendiente GPIO/circuito** |
-| RF-05 | Cuando una solicitud de acceso sea clasificada como denegada, el sistema deberá mantener la salida eléctrica de apertura en estado inactivo. | Prueba | CU-02 | **Pendiente GPIO/circuito** |
-| RF-06 | Ante una solicitud de acceso, el sistema deberá generar evidencia de video asociada con el evento ocurrido en el punto de entrada. | Prueba | CU-01 / CU-04 | Validado en Raspberry |
-| RF-07 | El sistema deberá conservar en almacenamiento persistente la evidencia de video generada para cada solicitud de acceso. | Prueba + inspección | CU-04 | Validado |
-| RF-08 | Durante el modo de operación normal, el sistema deberá transmitir en vivo hacia el puesto de vigilancia el flujo de video capturado en el punto de acceso. | Demostración | CU-03 | Validado Raspberry → Docker |
-| RF-09 | El sistema deberá registrar cada solicitud de acceso con una marca de tiempo y el resultado de autorización correspondiente. | Prueba / inspección | — | Validado; además registra ruta de evidencia |
+## RF-01 — Captura de video
+
+El sistema deberá capturar continuamente el flujo de video proveniente de la cámara instalada en el punto de acceso.
+
+**Verificación:** demostración sobre Raspberry Pi.
+
+---
+
+## RF-02 — Detección de código QR
+
+El sistema deberá detectar códigos QR presentes en el flujo de video capturado por la cámara.
+
+**Verificación:** prueba funcional con códigos QR.
+
+---
+
+## RF-03 — Decodificación de identificación
+
+El sistema deberá obtener el identificador contenido en un código QR correctamente detectado.
+
+**Verificación:** prueba funcional.
+
+---
+
+## RF-04 — Validación de acceso
+
+El sistema deberá clasificar un identificador decodificado como autorizado o denegado.
+
+Los identificadores configurados como autorizados son:
+
+```text
+MC001
+MC002
+```
+
+**Verificación:** prueba con identificadores autorizados y no autorizados.
+
+---
+
+## RF-05 — Apertura autorizada
+
+Cuando una solicitud sea clasificada como autorizada, el sistema deberá activar la salida lógica de apertura durante:
+
+```text
+2 s
+```
+
+**Verificación:** inspección de software y prueba de la interfaz GPIO cuando corresponda al montaje físico.
+
+---
+
+## RF-06 — Estado seguro ante denegación
+
+Cuando una solicitud sea clasificada como denegada, el sistema deberá mantener la salida de apertura en estado inactivo.
+
+**Verificación:** prueba funcional.
+
+---
+
+## RF-07 — Estado seguro ante timeout
+
+Si la decisión de acceso no finaliza dentro de:
+
+```text
+10 s
+```
+
+el sistema deberá clasificar la solicitud como denegada y mantener la salida de apertura inactiva.
+
+**Verificación:** prueba de timeout fail-secure.
+
+---
+
+## RF-08 — Registro del evento
+
+El sistema deberá registrar cada solicitud de acceso procesada junto con:
+
+- fecha y hora;
+- identificador;
+- resultado de autorización;
+- referencia a la evidencia generada.
+
+**Verificación:** inspección de la bitácora.
+
+---
+
+## RF-09 — Generación de evidencia
+
+El sistema deberá generar una evidencia de video asociada con cada solicitud de acceso procesada.
+
+**Verificación:** inspección de archivos generados.
+
+---
+
+## RF-10 — Duración de evidencia
+
+Cada evidencia deberá mantenerse durante:
+
+```text
+60 s
+```
+
+antes de finalizar la grabación.
+
+**Verificación:** prueba de duración y cierre de archivo.
+
+---
+
+## RF-11 — Almacenamiento persistente
+
+El sistema deberá almacenar las evidencias en:
+
+```text
+/var/lib/control-acceso/evidencias/
+```
+
+y la bitácora en:
+
+```text
+/var/lib/control-acceso/bitacora_accesos.log
+```
+
+**Verificación:** inspección del sistema de archivos.
+
+---
+
+## RF-12 — Transmisión de video
+
+El sistema deberá transmitir continuamente el video del punto de acceso hacia la estación de vigilancia.
+
+La transmisión deberá utilizar:
+
+```text
+H.264
+RTP
+UDP
+```
+
+**Verificación:** demostración Raspberry Pi → Docker.
+
+---
+
+## RF-13 — Visualización remota
+
+La estación de vigilancia deberá presentar el flujo recibido mediante una interfaz web accesible desde la computadora del operador.
+
+La interfaz utilizada es:
+
+```text
+http://localhost:8081
+```
+
+**Verificación:** demostración desde navegador.
+
+---
+
+## RF-14 — Recuperación ante pérdida de cámara
+
+Si el sistema permanece durante:
+
+```text
+3 s
+```
+
+sin recibir frames después de iniciar correctamente el pipeline, deberá:
+
+1. llevar la salida de apertura al estado inactivo;
+2. finalizar la aplicación como error;
+3. permitir que systemd ejecute la política de recuperación configurada.
+
+**Verificación:** prueba de watchdog y recuperación.
+
+---
+
+## RF-15 — Reinicio del servicio
+
+El servicio deberá configurarse para reiniciar la aplicación cuando esta termine por fallo.
+
+La política será:
+
+```text
+Restart=on-failure
+RestartSec=5
+```
+
+**Verificación:** prueba de reinicio mediante systemd.
 
 ---
 
 # 3. Requerimientos de desempeño
 
-Estos requerimientos fueron definidos como necesarios, pero la especificación original indicó que sus valores cuantitativos debían justificarse mediante pruebas y no fijarse arbitrariamente.
+## RD-01 — Resolución de captura
 
-| ID | Requerimiento definido | Estado original | Estado actual |
-|---|---|---|---|
-| RD-01 | Durante la captura de video, el sistema deberá mantener una resolución mínima de 1280 × 720 píxeles. | Pendiente | El pipeline está configurado y ha negociado 1280×720; conservar evidencia final |
-| RD-02 | Durante la captura y transmisión de video, el sistema deberá mantener una tasa mínima de 30 imágenes por segundo. | Pendiente | **No cerrado:** falta medir FPS reales en Raspberry |
-| RD-03 | Durante la transmisión en vivo, el sistema deberá mantener una latencia máxima de **[POR DEFINIR]** entre el punto de acceso y el puesto de vigilancia. | Pendiente | **No cerrado:** falta fijar umbral y medir E2E final |
-| RD-04 | Ante una solicitud autorizada, el sistema deberá activar la salida eléctrica en un tiempo máximo de 2 segundos después de completar la validación. | Pendiente | **No cerrado:** requiere GPIO |
-| RD-05 | Para cada solicitud de acceso, el sistema deberá conservar evidencia de video durante un intervalo mínimo de **[POR DEFINIR]**. | Pendiente | Implementación actual: 60 s por evento; falta formalizar el valor como línea base si el equipo/profesor lo aprueba |
-
-## 3.1 Valores de implementación que no sustituyen automáticamente la especificación
-
-En la versión actual:
+El sistema deberá operar con una resolución de:
 
 ```text
-Resolución solicitada/configurada: 1280x720
-Framerate solicitado:            30/1
-Duración de evidencia:           60 s
-Timeout de decisión:             10 s
+1280 × 720 píxeles
 ```
 
-El framerate solicitado en caps **no constituye una medición de FPS reales**. La validación final debe contar cuadros.
+en el flujo principal de captura.
+
+**Verificación:** inspección de caps negociados.
+
+---
+
+## RD-02 — Framerate
+
+El sistema deberá operar con un framerate objetivo de:
+
+```text
+30 fps
+```
+
+en el punto de captura.
+
+**Verificación:** medición real de frames sobre Raspberry Pi.
+
+---
+
+## RD-03 — Codificación H.264
+
+El sistema deberá producir un flujo H.264 adecuado para transmisión RTP y almacenamiento de evidencias.
+
+La implementación funcional deberá utilizar:
+
+```text
+x264enc
+```
+
+con una tasa configurada de:
+
+```text
+2000 kbit/s
+```
+
+**Verificación:** inspección del pipeline y recepción del flujo.
+
+---
+
+## RD-04 — Intervalo de keyframes
+
+La codificación deberá utilizar:
+
+```text
+key-int-max=30
+scenecut=0
+```
+
+de manera que, con una operación cercana a 30 fps, el intervalo entre keyframes sea aproximadamente:
+
+```text
+1 s
+```
+
+**Verificación:** medición de keyframes.
+
+---
+
+## RD-05 — Capacidad de almacenamiento
+
+El medio de almacenamiento deberá proporcionar una tasa de escritura superior a la requerida por el flujo de evidencia H.264 generado por el sistema.
+
+**Verificación:** prueba de escritura y comparación con el bitrate configurado.
 
 ---
 
 # 4. Requerimientos de interfaz
 
-| ID | Requerimiento | Verificación | Estado |
-|---|---|---|---|
-| RI-01 | La interfaz de cámara del sistema deberá recibir el flujo de video proveniente de la cámara instalada en el punto de acceso. | Demostración | Validado con OV5647 + libcamera |
-| RI-02 | La interfaz de red del sistema deberá entregar al puesto de vigilancia el flujo de video destinado a la transmisión en vivo. | Demostración | Validado mediante H.264 RTP/UDP |
-| RI-03 | La interfaz de salida del sistema deberá proporcionar al mecanismo de apertura un estado eléctrico correspondiente al resultado de autorización del acceso. | Prueba | **Pendiente GPIO/circuito** |
+## RI-01 — Interfaz de cámara
 
-No se define una interfaz para lector externo porque el QR se obtiene mediante la misma cámara del sistema.
+El sistema deberá utilizar la Raspberry Pi Camera Board con sensor OV5647 como fuente de video en la plataforma objetivo.
 
----
+La captura se realizará mediante:
 
-# 5. Restricciones de plataforma y diseño
-
-| ID | Restricción | Origen | Estado |
-|---|---|---|---|
-| RC-01 | El sistema deberá ejecutarse sobre una Raspberry Pi 4. | Instructivo | Cumplido |
-| RC-02 | El sistema deberá ser compatible con la Raspberry Pi Camera Board v1.3 de 5 MP (AD35352) disponible para el proyecto. | Hardware disponible | Cumplido con sensor OV5647 |
-| RC-03 | El sistema deberá disponer de almacenamiento persistente para conservar la evidencia generada. | Retención de evidencia | Cumplido en microSD |
-| RC-04 | La identificación de acceso deberá realizarse utilizando únicamente información obtenida mediante la cámara del sistema. | Criterio confirmado por el profesor | Cumplido |
-| RC-05 | El mecanismo de identificación seleccionado para el proyecto será un código QR presentado frente a la cámara. | Decisión del equipo | Cumplido |
+```text
+libcamera
++
+libcamerasrc
+```
 
 ---
 
-# 6. Requerimientos de proceso
+## RI-02 — Interfaz QR
 
-| ID | Requerimiento de proceso | Evidencia en el repositorio |
-|---|---|---|
-| RP-01 | El proceso de desarrollo deberá prototipar los flujos multimedia mediante gst-launch-1.0 antes de su implementación en la aplicación. | [10_fundamentos_yocto_gstreamer.md](10_fundamentos_yocto_gstreamer.md) |
-| RP-02 | La implementación de los flujos multimedia deberá realizarse mediante GStreamer y Python. | `prueba_integrada_h1.py` |
-| RP-03 | El proceso de construcción del sistema operativo deberá utilizar Yocto Project a partir de una imagen mínima o base. | `meta-control-acceso/`, [03_yocto_build_install.md](03_yocto_build_install.md) |
-| RP-04 | La configuración de la imagen deberá incluir el soporte requerido para ejecutar el sistema sobre una Raspberry Pi 4. | `yocto-config/`, `meta-raspberrypi` |
-| RP-05 | La imagen Linux generada deberá instalarse en una tarjeta microSD para su ejecución en la Raspberry Pi 4. | [03_yocto_build_install.md](03_yocto_build_install.md) |
-| RP-06 | El sistema integrado deberá verificarse sobre una Raspberry Pi 4 con una cámara conectada. | [06_validacion.md](06_validacion.md) |
+La identificación de acceso deberá obtenerse mediante la cámara del sistema.
+
+No se requiere un lector externo de códigos para la operación definida.
 
 ---
 
-# 7. Requerimientos de calidad o no funcionales
+## RI-03 — Interfaz de red
 
-| ID | Requerimiento | Verificación / estado |
-|---|---|---|
-| RQ-01 | La evidencia de video almacenada deberá permanecer disponible después de reiniciar la aplicación del sistema. | Persistencia implementada; repetir verificación final tras reboot de imagen definitiva |
-| RQ-02 | Si el sistema no puede determinar el resultado de una solicitud de acceso dentro del tiempo máximo establecido, deberá clasificar la solicitud como denegada. | Política fail-secure implementada y previamente probada |
-| RQ-03 | Durante el arranque del sistema y ante una falla de la aplicación, la salida eléctrica asociada con la apertura deberá permanecer en estado inactivo. | **Pendiente de validar con GPIO real** |
+El nodo embebido deberá enviar el flujo de vigilancia mediante RTP/H.264 sobre UDP.
 
-No se añaden requisitos arbitrarios de disponibilidad, mantenibilidad, portabilidad o seguridad sin una necesidad y métrica previamente justificadas.
+La configuración utilizada deberá admitir:
 
----
+```text
+DEST_HOST
+DEST_PORT
+```
 
-# 8. Requerimiento de usabilidad / calidad en uso
-
-| ID | Requerimiento | Estado |
-|---|---|---|
-| RU-01 | Después de procesar una solicitud de acceso, el sistema deberá proporcionar una indicación visible que permita distinguir si la solicitud fue autorizada o denegada. | Propuesto; implementación física por definir junto con GPIO |
-
-La especificación original no fija obligatoriamente si la indicación será mediante LED u otro mecanismo.
+como parámetros de ejecución.
 
 ---
 
-# 9. Diagrama de requerimientos
+## RI-04 — Puerto de streaming
+
+La estación de vigilancia deberá recibir el flujo en:
+
+```text
+UDP 5000
+```
+
+salvo que la configuración de despliegue establezca otro valor.
+
+---
+
+## RI-05 — Interfaz web
+
+La estación del vigilante deberá publicar su interfaz HTTP en:
+
+```text
+TCP 8081
+```
+
+---
+
+## RI-06 — Interfaz de apertura
+
+La aplicación deberá utilizar:
+
+```text
+BCM17
+```
+
+como salida lógica asociada con la apertura.
+
+El estado:
+
+```text
+LOW
+```
+
+representará apertura inactiva.
+
+El estado:
+
+```text
+HIGH
+```
+
+representará una orden temporal de apertura.
+
+---
+
+# 5. Requerimientos de persistencia
+
+## RP-01 — Retención de evidencia
+
+El sistema deberá conservar las evidencias durante:
+
+```text
+7 días
+```
+
+y eliminar automáticamente las que alcancen o superen ese tiempo de retención.
+
+---
+
+## RP-02 — Retención de bitácora
+
+El sistema deberá conservar los eventos de bitácora durante:
+
+```text
+30 días
+```
+
+y eliminar automáticamente los registros que alcancen o superen ese tiempo de retención.
+
+---
+
+## RP-03 — Conservación ante reinicio
+
+Los archivos de evidencia y bitácora deberán almacenarse fuera de directorios temporales para permanecer disponibles después de reiniciar la aplicación.
+
+---
+
+# 6. Requerimientos de seguridad funcional
+
+## RS-01 — Política fail-secure
+
+El sistema deberá mantener la salida de apertura inactiva siempre que no exista una autorización confirmada.
+
+Esto incluye:
+
+```text
+identificador denegado
+timeout
+error fatal
+pérdida de frames
+cierre de la aplicación
+```
+
+---
+
+## RS-02 — Inicialización segura
+
+Al inicializar la interfaz GPIO, la aplicación deberá configurar la salida de apertura en estado:
+
+```text
+LOW
+```
+
+---
+
+## RS-03 — Cierre seguro
+
+Antes de terminar por error o durante un cierre coordinado, la aplicación deberá ejecutar la desactivación de la salida de apertura.
+
+---
+
+## RS-04 — Error de almacenamiento
+
+Si GStreamer detecta un error durante la escritura de una evidencia, la condición deberá propagarse mediante el mecanismo de manejo de errores del pipeline.
+
+---
+
+# 7. Restricciones de plataforma
+
+## RC-01 — Plataforma embebida
+
+La plataforma objetivo será:
+
+```text
+Raspberry Pi 4
+```
+
+---
+
+## RC-02 — Sistema operativo
+
+El sistema operativo deberá construirse mediante:
+
+```text
+Yocto Project
+```
+
+utilizando la serie:
+
+```text
+Scarthgap
+```
+
+---
+
+## RC-03 — Administración de servicios
+
+La imagen deberá utilizar:
+
+```text
+systemd
+```
+
+como administrador de servicios.
+
+---
+
+## RC-04 — Framework multimedia
+
+La captura, procesamiento multimedia, codificación, transmisión y grabación deberán implementarse mediante:
+
+```text
+GStreamer
+```
+
+---
+
+## RC-05 — Procesamiento QR
+
+La detección y decodificación de códigos QR deberá realizarse mediante:
+
+```text
+OpenCV
+```
+
+---
+
+## RC-06 — Lenguaje de aplicación
+
+La aplicación principal deberá implementarse en:
+
+```text
+Python 3
+```
+
+---
+
+## RC-07 — Estación de vigilancia
+
+El receptor y la interfaz de vigilancia deberán poder ejecutarse dentro de:
+
+```text
+Docker
+```
+
+sobre la computadora de supervisión.
+
+---
+
+# 8. Requerimientos de construcción y despliegue
+
+## RB-01 — Capa propia
+
+La configuración específica del proyecto deberá mantenerse dentro de una capa Yocto propia:
+
+```text
+meta-control-acceso
+```
+
+---
+
+## RB-02 — Receta de aplicación
+
+La aplicación deberá incorporarse a la imagen mediante:
+
+```text
+control-acceso_1.0.bb
+```
+
+---
+
+## RB-03 — Receta de imagen
+
+La imagen final deberá construirse mediante:
+
+```text
+control-acceso-image.bb
+```
+
+---
+
+## RB-04 — Arranque automático
+
+La aplicación deberá quedar habilitada durante la construcción para ejecutarse automáticamente al iniciar la Raspberry Pi.
+
+---
+
+## RB-05 — Configuración externa
+
+Los parámetros de ejecución principales deberán separarse del código mediante:
+
+```text
+/etc/default/control-acceso
+```
+
+---
+
+# 9. Requerimientos de mantenibilidad y trazabilidad
+
+## RM-01 — Versiones reproducibles
+
+Las revisiones principales de las capas Yocto utilizadas deberán quedar registradas en:
+
+```text
+yocto-config/versiones.txt
+```
+
+---
+
+## RM-02 — Configuración reproducible
+
+La configuración específica del build deberá quedar documentada en:
+
+```text
+yocto-config/project-local.conf
+```
+
+---
+
+## RM-03 — Consistencia de la aplicación
+
+La copia principal de la aplicación y la copia utilizada por la receta Yocto deberán mantenerse equivalentes.
+
+---
+
+## RM-04 — Evidencia de validación
+
+Las pruebas automatizadas deberán generar resultados que puedan almacenarse bajo:
+
+```text
+resultados/
+```
+
+---
+
+# 10. Relación con los casos de uso
+
+| Caso de uso | Requerimientos principales |
+|---|---|
+| CU-01 Solicitar acceso | RF-02, RF-03, RF-04, RF-08, RF-09 |
+| CU-02 Validar identificación | RF-04, RF-06, RF-07, RS-01 |
+| CU-03 Supervisar punto de acceso | RF-12, RF-13, RI-03, RI-04, RI-05 |
+| CU-04 Registrar evento y evidencia | RF-08, RF-09, RF-10, RF-11, RP-01, RP-02 |
+| CU-05 Controlar apertura | RF-05, RF-06, RI-06, RS-01, RS-02, RS-03 |
+| CU-06 Administrar el sistema | RF-15, RB-05, RM-01, RM-02, RM-04 |
+
+---
+
+# 11. Diagrama de requerimientos
 
 ```mermaid
 flowchart TB
     SYS["Sistema de control de acceso"]
 
-    subgraph FUNC["Funcionales"]
-        RF1["RF-01 Capturar video"]
-        RF2["RF-02 Obtener ID QR"]
-        RF3["RF-03 Clasificar acceso"]
-        RF4["RF-04 Activar apertura"]
-        RF5["RF-05 Mantener apertura inactiva"]
-        RF6["RF-06 Generar evidencia"]
-        RF7["RF-07 Persistir evidencia"]
-        RF8["RF-08 Transmitir video"]
-        RF9["RF-09 Registrar solicitud"]
-    end
+    SYS --> FUNC["Requerimientos funcionales"]
+    SYS --> PERF["Desempeño"]
+    SYS --> INTER["Interfaces"]
+    SYS --> SAFE["Seguridad funcional"]
+    SYS --> PLAT["Plataforma"]
+    SYS --> DEP["Construcción y despliegue"]
 
-    subgraph CAL["Calidad / uso"]
-        RQ1["RQ-01 Persistencia"]
-        RQ2["RQ-02 Fail-secure por timeout"]
-        RQ3["RQ-03 Estado seguro"]
-        RU1["RU-01 Indicación visible"]
-    end
+    FUNC --> QR["QR y validación"]
+    FUNC --> VID["Video y vigilancia"]
+    FUNC --> EVID["Evidencias"]
+    FUNC --> OPEN["Control de apertura"]
 
-    subgraph REST["Restricciones"]
-        RC1["RC-01 Raspberry Pi 4"]
-        RC2["RC-02 Camera Board v1.3"]
-        RC4["RC-04 Identificación por cámara"]
-        RC5["RC-05 Código QR"]
-    end
+    PERF --> RES["1280×720"]
+    PERF --> FPS["30 fps objetivo"]
+    PERF --> H264["H.264 / 2000 kbit/s"]
 
-    SYS --> FUNC
-    SYS --> CAL
-    SYS --> REST
+    SAFE --> FS["Fail-secure"]
+    SAFE --> WD["Watchdog"]
+    SAFE --> SD["systemd"]
 
-    RF2 --> RF3
-    RF3 --> RF4
-    RF3 --> RF5
-    RF6 --> RF7
-    RF3 --> RF9
+    PLAT --> RPI["Raspberry Pi 4"]
+    PLAT --> YOCTO["Yocto Scarthgap"]
+    PLAT --> GST["GStreamer"]
 ```
 
 ---
 
-# 10. Trazabilidad caso de uso → requerimientos → funciones
+# 12. Resumen de parámetros de diseño
 
-| Caso de uso | Requerimientos asociados | Funciones asociadas |
-|---|---|---|
-| CU-01 Solicitar acceso | RF-02, RF-03, RF-04, RF-05, RF-06 | F-02, F-03, F-04, F-05, F-06 |
-| CU-02 Validar identificación | RF-02, RF-03, RF-04, RF-05 | F-02, F-03, F-04, F-05 |
-| CU-03 Supervisar punto de acceso | RF-01, RF-08 | F-01, F-08 |
-| CU-04 Registrar evidencia | RF-06, RF-07, RQ-01 | F-06, F-07 |
-
-## 10.1 Funciones del sistema definidas
-
-| ID | Función | Descripción resumida |
-|---|---|---|
-| F-01 | Capturar video | Obtener el flujo de imágenes |
-| F-02 | Detectar código QR | Determinar presencia de QR |
-| F-03 | Decodificar código QR | Extraer identificador |
-| F-04 | Validar identificador | Producir resultado de autorización |
-| F-05 | Controlar salida de acceso | Activar o mantener inactiva la salida |
-| F-06 | Generar evidencia | Crear segmento asociado al evento |
-| F-07 | Almacenar evidencia | Conservar evidencia persistentemente |
-| F-08 | Transmitir video | Enviar flujo al puesto de vigilancia |
-| F-09 | Indicar resultado | Proporcionar indicación visible |
+| Parámetro | Valor |
+|---|---|
+| Plataforma | Raspberry Pi 4 |
+| Cámara | OV5647 |
+| Resolución | 1280 × 720 |
+| Framerate objetivo | 30 fps |
+| Codec | H.264 |
+| Encoder funcional | `x264enc` |
+| Bitrate configurado | 2000 kbit/s |
+| GOP | 30 frames |
+| Transporte | RTP/UDP |
+| Puerto RTP | 5000/UDP |
+| Interfaz web | 8081/TCP |
+| Identificadores autorizados | `MC001`, `MC002` |
+| Timeout de decisión | 10 s |
+| Duración de apertura | 2 s |
+| Watchdog de frames | 3 s |
+| Duración de evidencia | 60 s |
+| Retención de video | 7 días |
+| Retención de bitácora | 30 días |
+| GPIO de apertura | BCM17 |
 
 ---
 
-# 11. Requerimientos aún abiertos
+## 13. Criterio de validación
 
-Antes de declarar cerrada la especificación deben resolverse explícitamente:
+El cumplimiento de estos requerimientos debe determinarse mediante pruebas, inspección o demostración según corresponda.
 
-1. FPS reales y decisión sobre RD-02.
-2. Umbral de latencia y resultado de RD-03.
-3. Circuito GPIO y validación de RD-04, RF-04, RF-05, RI-03 y RQ-03.
-4. Formalización de 60 s como valor definitivo de RD-05.
-5. Implementación concreta de RU-01.
+Un requerimiento de diseño puede estar implementado en el código sin que eso implique automáticamente que exista validación física de todos sus componentes.
+
+En particular, la implementación de la lógica GPIO se documenta como parte del diseño del sistema, mientras que los resultados experimentales de cada prueba se mantienen en:
+
+```text
+06_validacion.md
+```
+
+De esta forma se conserva la separación entre:
+
+```text
+especificación
+implementación
+validación
+```
