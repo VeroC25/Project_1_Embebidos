@@ -62,7 +62,7 @@ Esta secuencia permitió validar subsistemas antes de combinarlos en la platafor
 | Validación del sistema | `06_validacion.md` |
 | Procedimiento de demostración | `07_demostracion.md` |
 | Registro del proceso técnico | `08_bitacora_trabajo.md` |
-| Declaración de uso de IA | `09_uso_ia_resumido.md` |
+| Declaración de uso de IA | `09_uso_ia.md` |
 
 ---
 
