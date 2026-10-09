@@ -1,0 +1,18 @@
+H1 - ARQUITECTURA DE HILOS
+
+Objetivo:
+Demostrar que la decision de acceso no bloquea el hilo de GStreamer.
+
+[PASS] Callback encola frames
+[PASS] Callback no ejecuta deteccion ni decision
+[PASS] Existe hilo QR independiente
+[PASS] Hilo QR consume cola de frames
+[PASS] Deteccion QR fuera del callback
+[PASS] Decision solicitada desde hilo QR
+[PASS] Existe ThreadPoolExecutor
+[PASS] Clasificador delegado al executor
+
+Arquitectura verificada:
+GStreamer/appsink -> cola_frames -> hilo procesar_qr -> ThreadPoolExecutor -> clasificador
+
+PASS: la decision de acceso corre fuera del hilo de GStreamer.

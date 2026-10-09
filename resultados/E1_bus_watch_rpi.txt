@@ -1,0 +1,10 @@
+E1 - WATCH DEL BUS DE GSTREAMER
+
+[PASS] Obtencion del bus
+[PASS] Signal watch
+[PASS] Conexion del manejador
+[PASS] Manejo de ERROR
+[PASS] Manejo de WARNING
+[PASS] Manejo de EOS
+
+PASS: el pipeline tiene un watch del bus y atiende ERROR, WARNING y EOS.

@@ -1,0 +1,25 @@
+services:
+  vigilante:
+    image: control-acceso-dev:ci
+    command: ["bash", "/proyecto/docker/vigilante.sh"]
+    volumes:
+      - ./docker:/proyecto/docker:ro
+    networks:
+      - red-control-acceso
+
+  emisor:
+    image: control-acceso-dev:ci
+    command: ["bash", "/proyecto/docker/emisor.sh"]
+    environment:
+      DEST_HOST: vigilante
+      DEST_PORT: "5000"
+    volumes:
+      - ./docker:/proyecto/docker:ro
+    depends_on:
+      - vigilante
+    networks:
+      - red-control-acceso
+
+networks:
+  red-control-acceso:
+    driver: bridge

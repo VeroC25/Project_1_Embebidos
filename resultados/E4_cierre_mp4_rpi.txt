@@ -1,0 +1,37 @@
+E4 - CIERRE LIMPIO Y MP4 REPRODUCIBLE
+
+Archivo: /var/lib/control-acceso/evidencias/evidencia_2026-10-08_18-48-43_218614.mp4
+
+Servicio despues del reinicio:
+active
+
+Informacion del archivo:
+-rw-r--r--    1 root     root        1.1M Oct  8 18:48 /var/lib/control-acceso/evidencias/evidencia_2026-10-08_18-48-43_218614.mp4
+
+Validacion gst-discoverer:
+Analyzing file:///var/lib/control-acceso/evidencias/evidencia_2026-10-08_18-48-43_218614.mp4
+Done discovering file:///var/lib/control-acceso/evidencias/evidencia_2026-10-08_18-48-43_218614.mp4
+
+Properties:
+  Duration: 0:00:06.132333333
+  Seekable: yes
+  Live: no
+  container #0: Quicktime
+    video #1: H.264 (High Profile)
+      Stream ID: 3b8bd1bd9cb64543f942e6c4a3c64f1475c8abdc80273f6ce03bd2ed720b5365/001
+      Width: 1280
+      Height: 720
+      Depth: 24
+      Frame rate: 64/3
+      Pixel aspect ratio: 1/1
+      Interlaced: false
+      Bitrate: 2002028
+      Max bitrate: 2048000
+
+
+Prueba de lectura completa:
+
+gst-discoverer exit: 0
+gst-launch exit: 0
+
+TEST E4 CIERRE MP4: PASS

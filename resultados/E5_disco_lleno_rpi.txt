@@ -1,0 +1,12 @@
+E5 - COMPORTAMIENTO ANTE DISCO LLENO
+
+=== ESTADO DEL FILESYSTEM ===
+Filesystem                Size      Used Available Use% Mounted on
+tmpfs                     8.0M      8.0M         0 100% /mnt/e5-disk
+
+=== ERRORES DE GSTREAMER ===
+ERROR: from element /GstPipeline:pipeline0/GstFileSink:filesink0: No space left on the resource.
+ERROR: from element /GstPipeline:pipeline0/GstMP4Mux:mp4mux0: Could not multiplex stream.
+
+=== RESULTADO ===
+TEST E5 DISCO LLENO: PASS
